@@ -1,0 +1,105 @@
+import * as colorComboService from '../services/colorCombo.service.js';
+import { validate } from '../middleware/validate.js';
+import { createColorComboSchema, updateColorComboSchema } from '../validators/colorCombo.validators.js';
+
+export const listColorCombos = async (req, res, next) => {
+  try {
+    const { group } = req.query;
+    const combos = await colorComboService.listColorCombos(group || null);
+
+    res.json({
+      success: true,
+      data: combos
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getColorComboProducts = async (req, res, next) => {
+  try {
+    const result = await colorComboService.getColorComboProducts(req.params.id);
+
+    res.json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const createColorCombo = async (req, res, next) => {
+  try {
+    const { name, color_a, color_b, group_type, product_ids } = req.body;
+
+    await validate(createColorComboSchema)({ body: req.body }, res, () => {});
+
+    let modelImageUrl = null;
+    if (req.files && req.files.length > 0) {
+      const modelFile = req.files.find(f => f.fieldname === 'model_image');
+      if (modelFile) {
+        const { uploadColorComboImage } = await import('../services/upload.service.js');
+        modelImageUrl = await uploadColorComboImage(modelFile.buffer, modelFile.originalname, modelFile.mimetype);
+      }
+    }
+
+    const comboData = {
+      name,
+      color_a,
+      color_b,
+      group_type: group_type || null,
+      model_image: modelImageUrl,
+      product_ids: product_ids || []
+    };
+
+    const combo = await colorComboService.createColorCombo(comboData);
+
+    res.status(201).json({ success: true, data: combo });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateColorCombo = async (req, res, next) => {
+  try {
+    await validate(updateColorComboSchema)({ params: req.params, body: req.body }, res, () => {});
+
+    const updates = { ...req.body };
+
+    if (req.files && req.files.length > 0) {
+      const modelFile = req.files.find(f => f.fieldname === 'model_image');
+      if (modelFile) {
+        const { uploadColorComboImage, deleteProductImage } = await import('../services/upload.service.js');
+        const modelImageUrl = await uploadColorComboImage(modelFile.buffer, modelFile.originalname, modelFile.mimetype);
+        
+        if (req.body.prev_model_image) {
+          await deleteProductImage(req.body.prev_model_image).catch(() => {});
+        }
+        updates.model_image = modelImageUrl;
+      }
+    }
+
+    const combo = await colorComboService.updateColorCombo(req.params.id, updates);
+    res.json({ success: true, data: combo });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteColorCombo = async (req, res, next) => {
+  try {
+    const { model_image } = req.body;
+    if (model_image) {
+      const { deleteProductImage } = await import('../services/upload.service.js');
+      await deleteProductImage(model_image).catch(() => {});
+    }
+
+    await colorComboService.deleteColorCombo(req.params.id);
+
+    res.json({ success: true, message: 'Color combo deleted' });
+  } catch (error) {
+    next(error);
+  }
+};
+
