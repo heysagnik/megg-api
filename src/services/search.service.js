@@ -331,7 +331,7 @@ export const unifiedSearch = async ({
   if (appliedCategory) {
     const { data: categoryBanners } = await supabaseAdmin
       .from('category_banners')
-      .select('id, banner_image, advertisement_link, title, display_order')
+      .select('id, banner_image, link, title, display_order')
       .eq('category', appliedCategory)
       .order('display_order', { ascending: true });
     
