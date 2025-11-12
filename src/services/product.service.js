@@ -71,7 +71,7 @@ export const browseByCategory = async ({ category, subcategory, color, sort = 'p
 
   const { data: banners, error: bannersError } = await supabaseAdmin
     .from('category_banners')
-    .select('id, banner_image, link, title, display_order')
+    .select('id, banner_image, link, display_order')
     .eq('category', category)
     .order('display_order', { ascending: true });
 
