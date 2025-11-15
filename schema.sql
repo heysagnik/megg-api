@@ -194,6 +194,7 @@ CREATE TABLE notifications (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   title TEXT NOT NULL,
   description TEXT NOT NULL,
+  image TEXT,
   link TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
