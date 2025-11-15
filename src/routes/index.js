@@ -11,6 +11,7 @@ import adminRoutes from './admin.routes.js';
 import searchRoutes from './search.routes.js';
 import uploadRoutes from './upload.routes.js';
 import bannerRoutes from './banner.routes.js';
+import notificationRoutes from './notification.routes.js';
 
 const router = express.Router();
 
@@ -26,6 +27,7 @@ router.use('/wishlist', wishlistRoutes);
 router.use('/admin', adminRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/banners', bannerRoutes);
+router.use('/notifications', notificationRoutes);
 
 router.get('/health', (req, res) => {
   res.json({ success: true, message: 'API is running' });
