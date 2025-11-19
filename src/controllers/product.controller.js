@@ -1,5 +1,6 @@
 import * as productService from '../services/product.service.js';
 import * as uploadService from '../services/upload.service.js';
+import * as searchService from '../services/search.service.js';
 import cache from '../utils/cache.js';
 
 export const uploadProductImages = async (req, res, next) => {
@@ -37,7 +38,16 @@ export const listProducts = async (req, res, next) => {
       });
     }
 
-    const result = await productService.listProducts(req.query);
+    let result;
+    if (req.query.search) {
+      // Use unified search service for smart search capabilities
+      result = await searchService.unifiedSearch({
+        ...req.query,
+        query: req.query.search // Map 'search' param to 'query'
+      });
+    } else {
+      result = await productService.listProducts(req.query);
+    }
 
     cache.set(cacheKey, result);
 

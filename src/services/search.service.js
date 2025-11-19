@@ -33,21 +33,21 @@ const isQueryRedundantWithFilters = (query, category, subcategory) => {
 
 const findBestCategoryMatch = (query) => {
   const scores = [];
-  
+
   for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
     for (const keyword of keywords) {
       if (matchWithWordBoundary(query, keyword)) {
         const exactMatch = query === keyword;
         const startsWithMatch = query.startsWith(keyword);
         const score = exactMatch ? 100 : startsWithMatch ? 50 : keyword.length;
-        
+
         scores.push({ category, score, keyword });
       }
     }
   }
-  
+
   if (scores.length === 0) return null;
-  
+
   scores.sort((a, b) => b.score - a.score);
   return scores[0].category;
 };
@@ -56,30 +56,30 @@ const findBestSubcategoryMatch = (query, category = null) => {
   const queryLower = query.toLowerCase();
   const queryWords = queryLower.split(/\s+/);
   const subcategoryScores = new Map();
-  
+
   for (const [subcategory, keywords] of Object.entries(SUBCATEGORY_KEYWORDS)) {
     let categoryMatch = false;
-    
+
     if (category) {
       const categorySubcategories = PRODUCT_SUBCATEGORIES[category] || [];
       categoryMatch = categorySubcategories.includes(subcategory);
     }
-    
+
     if (!categoryMatch && category) {
       continue;
     }
-    
+
     let bestScore = 0;
     let bestKeyword = null;
-    
+
     const sortedKeywords = [...keywords].sort((a, b) => b.length - a.length);
-    
+
     for (const keyword of sortedKeywords) {
       const keywordLower = keyword.toLowerCase();
       const keywordWords = keywordLower.split(/\s+/);
-      
+
       let matchScore = 0;
-      
+
       if (queryLower === keywordLower) {
         matchScore = 10000;
       } else if (queryLower.includes(keywordLower) && keywordLower.length > 3) {
@@ -94,37 +94,37 @@ const findBestSubcategoryMatch = (query, category = null) => {
       } else if (keywordWords.length === 1 && queryWords.includes(keywordLower)) {
         matchScore = 1000 + (keyword.length * 5);
       }
-      
+
       if (matchScore > bestScore) {
         bestScore = matchScore;
         bestKeyword = keyword;
       }
     }
-    
+
     if (bestScore > 0) {
       if (categoryMatch) {
         bestScore += 100000;
       }
-      
+
       const subcategoryLower = subcategory.toLowerCase();
       const subcategoryWords = subcategoryLower.split(/\s+/);
-      const matchingWords = subcategoryWords.filter(word => 
+      const matchingWords = subcategoryWords.filter(word =>
         queryWords.includes(word) && word.length > 2
       );
       bestScore += matchingWords.length * 500;
-      
+
       subcategoryScores.set(subcategory, { score: bestScore, keyword: bestKeyword, categoryMatch });
     }
   }
-  
+
   if (subcategoryScores.size === 0) return null;
-  
+
   const sorted = Array.from(subcategoryScores.entries())
     .sort((a, b) => {
       if (b[1].score !== a[1].score) return b[1].score - a[1].score;
       return b[1].keyword.length - a[1].keyword.length;
     });
-  
+
   const [bestSubcategory, meta] = sorted[0];
   return { subcategory: bestSubcategory, keyword: meta.keyword, score: meta.score, categoryMatch: meta.categoryMatch };
 };
@@ -132,7 +132,7 @@ const findBestSubcategoryMatch = (query, category = null) => {
 export const parseSearchQuery = (query) => {
   const normalizedQuery = query.toLowerCase().trim();
   const words = normalizedQuery.split(/\s+/);
-  
+
   const filters = {
     category: null,
     subcategory: null,
@@ -185,10 +185,10 @@ export const parseSearchQuery = (query) => {
   }
 
   for (const [color, variations] of Object.entries(COLOR_KEYWORDS)) {
-    const colorMatch = variations.some(variation => 
+    const colorMatch = variations.some(variation =>
       words.includes(variation) || matchWithWordBoundary(normalizedQuery, variation)
     );
-    
+
     if (colorMatch) {
       filters.color = color;
       break;
@@ -197,10 +197,10 @@ export const parseSearchQuery = (query) => {
 
   if (!filters.isDirectCategoryMatch && !filters.isSubcategoryMatch) {
     for (const [style, config] of Object.entries(STYLE_KEYWORDS)) {
-      const styleMatch = config.keywords.some(keyword => 
+      const styleMatch = config.keywords.some(keyword =>
         matchWithWordBoundary(normalizedQuery, keyword)
       );
-      
+
       if (styleMatch) {
         filters.style = style;
         filters.categories = config.categories;
@@ -217,21 +217,21 @@ export const parseSearchQuery = (query) => {
   return filters;
 };
 
-export const unifiedSearch = async ({ 
-  query = null, 
-  category = null, 
-  subcategory = null, 
-  color = null, 
-  sort = 'popularity', 
-  page = 1, 
-  limit = 20 
+export const unifiedSearch = async ({
+  query = null,
+  category = null,
+  subcategory = null,
+  color = null,
+  sort = 'popularity',
+  page = 1,
+  limit = 20
 }) => {
   const offset = (page - 1) * limit;
   const hasExplicitFilters = category || subcategory || color;
-  
+
   let filters = {};
   let searchMode = 'explicit';
-  
+
   if (query && !hasExplicitFilters) {
     filters = parseSearchQuery(query);
     searchMode = 'smart';
@@ -245,25 +245,25 @@ export const unifiedSearch = async ({
       isStyleSearch: false,
       searchTerm: query
     };
-    
+
     if (query) {
       const smartFilters = parseSearchQuery(query);
-      
+
       if (!filters.category && smartFilters.category) {
         filters.category = smartFilters.category;
         filters.isDirectCategoryMatch = smartFilters.isDirectCategoryMatch;
       }
-      
+
       if (!filters.subcategory && smartFilters.subcategory) {
         filters.subcategory = smartFilters.subcategory;
         filters.isSubcategoryMatch = smartFilters.isSubcategoryMatch;
       }
-      
+
       if (!filters.color && smartFilters.color) {
         filters.color = smartFilters.color;
       }
     }
-    
+
     searchMode = 'filtered';
   } else {
     filters = {};
@@ -272,8 +272,8 @@ export const unifiedSearch = async ({
 
   let dbQuery = supabaseAdmin
     .from('products')
-    .select('id, name, description, price, brand, images, category, subcategory, color, affiliate_link, popularity, clicks, created_at', { 
-      count: 'exact' 
+    .select('id, name, description, price, brand, images, category, subcategory, color, affiliate_link, popularity, clicks, created_at', {
+      count: 'exact'
     });
 
   if (hasExplicitFilters) {
@@ -282,11 +282,11 @@ export const unifiedSearch = async ({
     } else if (filters.category) {
       dbQuery = dbQuery.eq('category', filters.category);
     }
-    
+
     if (filters.color) {
       dbQuery = dbQuery.eq('color', filters.color);
     }
-    
+
     if (query && query.trim()) {
       const redundant = isQueryRedundantWithFilters(query, filters.category, filters.subcategory, filters.color);
       if (!redundant) {
@@ -327,14 +327,14 @@ export const unifiedSearch = async ({
 
   let banners = [];
   const appliedCategory = filters.category || category;
-  
+
   if (appliedCategory) {
     const { data: categoryBanners } = await supabaseAdmin
       .from('category_banners')
       .select('id, banner_image, link, title, display_order')
       .eq('category', appliedCategory)
       .order('display_order', { ascending: true });
-    
+
     banners = categoryBanners || [];
   }
 
@@ -353,16 +353,16 @@ export const unifiedSearch = async ({
       appliedSort: sort,
       appliedStyle: filters.style || null,
       appliedCategories: filters.categories || [],
-      searchType: hasExplicitFilters ? 'explicit' : 
-                  filters.isSubcategoryMatch ? 'subcategory' : 
-                  filters.isDirectCategoryMatch ? 'category' : 
-                  filters.isStyleSearch ? 'style' : 
-                  query ? 'text' : 'browse'
+      searchType: hasExplicitFilters ? 'explicit' :
+        filters.isSubcategoryMatch ? 'subcategory' :
+          filters.isDirectCategoryMatch ? 'category' :
+            filters.isStyleSearch ? 'style' :
+              query ? 'text' : 'browse'
     },
-    metadata: { 
-      query, 
+    metadata: {
+      query,
       explicitFilters: { category, subcategory, color },
-      parsedFilters: searchMode === 'smart' ? filters : null 
+      parsedFilters: searchMode === 'smart' ? filters : null
     }
   };
 };
@@ -423,7 +423,7 @@ export const getSearchSuggestions = async (partialQuery) => {
       if (data?.length) {
         const names = new Set();
         const brands = new Set();
-        
+
         data.forEach(p => {
           if (p.name?.toLowerCase().includes(normalizedQuery)) names.add(p.name);
           if (p.brand?.toLowerCase().includes(normalizedQuery)) brands.add(p.brand);
@@ -454,7 +454,7 @@ export const advancedSearch = async ({
   limit = 20
 }) => {
   const offset = (page - 1) * limit;
-  
+
   let dbQuery = supabaseAdmin
     .from('products')
     .select('id, name, description, price, brand, images, category, subcategory, color, affiliate_link, popularity, clicks, created_at', { count: 'exact' });
