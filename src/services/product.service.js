@@ -16,7 +16,6 @@ const applySorting = (query, sort) => {
       return query.order('created_at', { ascending: false });
   }
 };
-
 export const listProducts = async ({ category, subcategory, color, search, sort, page, limit }) => {
   const offset = (page - 1) * limit;
 
@@ -28,7 +27,11 @@ export const listProducts = async ({ category, subcategory, color, search, sort,
   if (subcategory) query = query.eq('subcategory', subcategory);
   if (color) query = query.eq('color', color);
   if (search) {
-    query = query.or(`name.ilike.%${search}%,brand.ilike.%${search}%,description.ilike.%${search}%`);
+
+    query = query.textSearch('search_vector', search, {
+      config: 'english',
+      type: 'plain'
+    });
   }
 
   query = applySorting(query, sort);
@@ -106,7 +109,7 @@ export const getProductById = async (id) => {
     throw new NotFoundError('Product not found');
   }
 
-  await supabaseAdmin.rpc('increment_product_clicks', { product_id: id }).catch(() => {});
+  await supabaseAdmin.rpc('increment_product_clicks', { product_id: id }).catch(() => { });
 
   const recommended = await getRecommendedProducts(data.suggested_colors, id);
 

@@ -26,6 +26,8 @@
     "firebase-admin": "^13.6.0",
     "helmet": "^7.1.0",
     "multer": "^2.0.2",
+    "node-cache": "^5.1.2",
+    "winston": "^3.18.3",
     "zod": "^3.22.4"
   },
   "devDependencies": {
