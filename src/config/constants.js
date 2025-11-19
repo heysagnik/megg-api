@@ -11,9 +11,11 @@ export const PRODUCT_CATEGORIES = [
   'Mens Accessories',
   'Sports',
   'Office wear',
+  'Innerwear',
+  'Daily Essentials',
   'Skin care',
   'Traditional',
-  'Perfume'
+  'Perfume',
 ];
 
 export const PRODUCT_SUBCATEGORIES = {
@@ -29,6 +31,16 @@ export const PRODUCT_SUBCATEGORIES = {
   'Mens Accessories': ['Bags', 'Caps', 'Watches', 'Tie', 'Belt', 'Sunglasses', 'Rings', 'Lockets'],
   Sports: ['Sports Shorts', 'Sports Jacket', 'Socks', 'Sports Shoes General', 'Football Shoes', 'Badminton Shoes', 'Gym Tee'],
   'Office wear': ['Formal Pants Office', 'Formal Shirts Office', 'Suits', 'Tuxedo', 'Formal Shoes Office', 'Loafers Office', 'Blazers', 'Ties & Pocket Squares'],
+  Innerwear: ['Trunks', 'Boxers', 'Vests', 'Briefs', 'Thermal Top', 'Thermal Bottom', 'Thermal Set'],
+  'Daily Essentials': [
+    'Storage & Organizers',
+    'Travel Essentials',
+    'Grooming Tools',
+    'Electronics',
+    'Cleaning & Care',
+    'Everyday Carry',
+    'Home Essentials'
+  ],
   'Skin care': ['Face Wash', 'Moisturiser', 'Cleanser', 'Sunscreen', 'Serum'],
   Traditional: ['Kurta', 'Koti', 'Pyjama', 'Short Kurta', 'Blazer Traditional', 'Kurta Set', 'Indo-western'],
   Perfume: ['EDT', 'EDC', 'EDP']
@@ -49,7 +61,15 @@ export const ALL_SUBCATEGORIES = [
   'Formal Pants Office', 'Formal Shirts Office', 'Suits', 'Tuxedo', 'Formal Shoes Office', 'Loafers Office', 'Blazers', 'Ties & Pocket Squares',
   'Face Wash', 'Moisturiser', 'Cleanser', 'Sunscreen', 'Serum',
   'Kurta', 'Koti', 'Pyjama', 'Short Kurta', 'Blazer Traditional', 'Kurta Set', 'Indo-western',
-  'EDT', 'EDC', 'EDP'
+  'EDT', 'EDC', 'EDP',
+  'Trunks', 'Boxers', 'Vests', 'Briefs', 'Thermal Top', 'Thermal Bottom', 'Thermal Set',
+  'Storage & Organizers',
+  'Travel Essentials',
+  'Grooming Tools',
+  'Electronics',
+  'Cleaning & Care',
+  'Everyday Carry',
+  'Home Essentials'
 ];
 
 export const VIDEO_CATEGORIES = [

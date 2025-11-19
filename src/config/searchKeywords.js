@@ -73,9 +73,12 @@ export const CATEGORY_KEYWORDS = {
   'Mens Accessories': ['accessories', 'watch', 'watches', 'bag', 'bags', 'cap', 'caps', 'tie', 'belt', 'sunglasses', 'ring', 'rings', 'locket', 'lockets'],
   'Sports': ['sports', 'gym', 'athletic', 'workout', 'football', 'badminton'],
   'Office wear': ['office', 'formal', 'business', 'professional', 'corporate', 'suit', 'blazer', 'tuxedo'],
+
   'Skin care': ['skin care', 'skincare', 'facewash', 'face wash', 'moisturizer', 'moisturiser', 'sunscreen', 'serum', 'cleanser'],
   'Traditional': ['traditional', 'ethnic', 'festive', 'kurta', 'sherwani', 'dhoti', 'indo western', 'koti'],
-  'Perfume': ['perfume', 'fragrance', 'cologne', 'scent', 'edt', 'edc', 'edp']
+  'Perfume': ['perfume', 'fragrance', 'cologne', 'scent', 'edt', 'edc', 'edp'],
+  'Innerwear': ['innerwear', 'inner wear', 'trunks', 'boxers', 'vests', 'briefs', 'thermal', 'thermals', 'underwear', 'undergarments'],
+  'Daily Essentials': ['daily essentials', 'essentials', 'storage', 'organizers', 'travel essentials', 'grooming tools', 'electronics', 'cleaning', 'care', 'everyday carry', 'home essentials']
 };
 
 export const SUBCATEGORY_KEYWORDS = {
@@ -172,5 +175,19 @@ export const SUBCATEGORY_KEYWORDS = {
   'Indo-western': ['indo western', 'fusion wear'],
   'EDT': ['edt', 'eau de toilette'],
   'EDC': ['edc', 'eau de cologne'],
-  'EDP': ['edp', 'eau de parfum']
+  'EDP': ['edp', 'eau de parfum'],
+  'Trunks': ['trunks', 'trunk'],
+  'Boxers': ['boxers', 'boxer', 'boxer shorts'],
+  'Vests': ['vests', 'vest', 'sleeveless'],
+  'Briefs': ['briefs', 'brief'],
+  'Thermal Top': ['thermal top', 'thermal shirt'],
+  'Thermal Bottom': ['thermal bottom', 'thermal pants'],
+  'Thermal Set': ['thermal set', 'thermal wear set'],
+  'Storage & Organizers': ['storage', 'organizers', 'organizer', 'storage box'],
+  'Travel Essentials': ['travel essentials', 'travel', 'luggage'],
+  'Grooming Tools': ['grooming tools', 'grooming', 'trimmer', 'razor'],
+  'Electronics': ['electronics', 'gadgets', 'tech'],
+  'Cleaning & Care': ['cleaning', 'care', 'cleaning tools'],
+  'Everyday Carry': ['everyday carry', 'edc', 'carry'],
+  'Home Essentials': ['home essentials', 'home', 'household']
 };
