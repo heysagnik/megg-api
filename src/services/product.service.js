@@ -167,7 +167,47 @@ export const createProduct = async (productData) => {
   return data;
 };
 
-export const updateProduct = async (id, updates) => {
+export const updateProduct = async (id, updates, newFiles = []) => {
+  // Get existing product to check current images
+  const { data: existingProduct, error: fetchError } = await supabaseAdmin
+    .from('products')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (fetchError || !existingProduct) {
+    throw new NotFoundError('Product not found');
+  }
+
+  // Handle Image Synchronization
+  // We sync if images are explicitly provided (kept images) or new files are uploaded
+  if (updates.images !== undefined || newFiles.length > 0) {
+    const currentImages = existingProduct.images || [];
+    let keptImages = updates.images || [];
+
+    // Ensure keptImages is array and filter valid strings
+    if (!Array.isArray(keptImages)) keptImages = [keptImages];
+    keptImages = keptImages.filter(url => typeof url === 'string' && url.trim().length > 0);
+
+    // Identify images to delete (present in current but not in kept)
+    const imagesToDelete = currentImages.filter(img => !keptImages.includes(img));
+
+    if (imagesToDelete.length > 0) {
+      const { deleteMultipleProductImages } = await import('./upload.service.js');
+      await deleteMultipleProductImages(imagesToDelete);
+    }
+
+    // Upload new files
+    let newImageUrls = [];
+    if (newFiles.length > 0) {
+      const { uploadMultipleProductImages } = await import('./upload.service.js');
+      newImageUrls = await uploadMultipleProductImages(newFiles);
+    }
+
+    // Merge kept images and new images
+    updates.images = [...keptImages, ...newImageUrls];
+  }
+
   const { data, error } = await supabaseAdmin
     .from('products')
     .update({ ...updates, updated_at: new Date().toISOString() })

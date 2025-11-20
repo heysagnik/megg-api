@@ -10,7 +10,7 @@ import {
   productIdSchema
 } from '../validators/product.validators.js';
 import { generalLimiter, adminLimiter } from '../middleware/rateLimiter.js';
-import { uploadImages, uploadImagesHandler } from '../middleware/upload.js';
+import { uploadImages, uploadImagesHandler, normalizeProductUpdateData } from '../middleware/upload.js';
 
 const router = express.Router();
 
@@ -21,7 +21,7 @@ router.get('/:id/related', generalLimiter, validate(productIdSchema), productCon
 
 router.post('/upload-images', authenticate, requireAdmin, adminLimiter, uploadImagesHandler, productController.uploadProductImages);
 router.post('/', authenticate, requireAdmin, adminLimiter, uploadImagesHandler, productController.createProduct);
-router.put('/:id', authenticate, requireAdmin, adminLimiter, validate(updateProductSchema), productController.updateProduct);
+router.put('/:id', authenticate, requireAdmin, adminLimiter, uploadImagesHandler, normalizeProductUpdateData, validate(updateProductSchema), productController.updateProduct);
 router.delete('/:id', authenticate, requireAdmin, adminLimiter, validate(productIdSchema), productController.deleteProduct);
 
 export default router;

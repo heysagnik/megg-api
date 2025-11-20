@@ -148,7 +148,10 @@ export const createProduct = async (req, res, next) => {
 
 export const updateProduct = async (req, res, next) => {
   try {
-    const product = await productService.updateProduct(req.params.id, req.body);
+    const updates = { ...req.body };
+    const files = req.files || [];
+
+    const product = await productService.updateProduct(req.params.id, updates, files);
 
     // Invalidate cache on update
     cache.flushAll();

@@ -139,3 +139,31 @@ export const uploadBannerHandler = (req, res, next) => {
   });
 };
 
+export const normalizeProductUpdateData = (req, res, next) => {
+  if (req.body) {
+    // Handle images[] -> images
+    if (req.body['images[]']) {
+      const imgs = req.body['images[]'];
+      req.body.images = Array.isArray(imgs) ? imgs : [imgs];
+      delete req.body['images[]'];
+    } else if (req.body.images && !Array.isArray(req.body.images)) {
+      req.body.images = [req.body.images];
+    }
+
+    // Handle price coercion
+    if (req.body.price) {
+      req.body.price = parseFloat(req.body.price);
+    }
+
+    // Handle suggested_colors parsing
+    if (req.body.suggested_colors && typeof req.body.suggested_colors === 'string') {
+      try {
+        req.body.suggested_colors = JSON.parse(req.body.suggested_colors);
+      } catch (e) {
+        // ignore
+      }
+    }
+  }
+  next();
+};
+
