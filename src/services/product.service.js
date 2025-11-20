@@ -113,7 +113,8 @@ export const getProductById = async (id) => {
     throw new NotFoundError('Product not found');
   }
 
-  await supabaseAdmin.rpc('increment_product_clicks', { product_id: id }).catch(() => { });
+  // Fire and forget click increment, ignore errors
+  supabaseAdmin.rpc('increment_product_clicks', { product_id: id }).then(() => {});
 
   const recommended = await getRecommendedProducts(data.suggested_colors, id);
 
@@ -227,7 +228,16 @@ export const updateProduct = async (id, updates, newFiles = []) => {
 };
 
 export const deleteProduct = async (id) => {
-  const product = await getProductById(id);
+  // Fetch product directly to avoid side effects (like incrementing clicks)
+  const { data: product, error: fetchError } = await supabaseAdmin
+    .from('products')
+    .select('*')
+    .eq('id', id)
+    .single();
+
+  if (fetchError || !product) {
+    throw new NotFoundError('Product not found');
+  }
 
   const { data: colorCombos } = await supabaseAdmin
     .from('color_combos')
@@ -261,9 +271,9 @@ export const deleteProduct = async (id) => {
     }
   }
 
-  if (product.product.images && product.product.images.length > 0) {
+  if (product.images && product.images.length > 0) {
     const { deleteMultipleProductImages } = await import('./upload.service.js');
-    await deleteMultipleProductImages(product.product.images);
+    await deleteMultipleProductImages(product.images);
   }
 
   const { data: deletedRow, error: deleteError } = await supabaseAdmin
