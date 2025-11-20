@@ -1,29 +1,71 @@
 import cloudinary from '../config/cloudinary.js';
 import { supabaseAdmin } from '../config/supabase.js';
 
+/**
+ * Helper to upload a file buffer to Cloudinary
+ * @param {Buffer} fileBuffer 
+ * @param {string} folder 
+ * @param {string} fileName 
+ * @param {string} resourceType 
+ * @returns {Promise<string>} Secure URL of the uploaded asset
+ */
+const uploadToCloudinary = (fileBuffer, folder, fileName, resourceType = 'image') => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        resource_type: resourceType,
+        folder: folder,
+        public_id: `${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.-]/g, '_')}`,
+        format: resourceType === 'image' ? 'webp' : undefined, // Convert images to webp
+        quality: 'auto'
+      },
+      (error, result) => {
+        if (error) {
+          return reject(new Error(`Cloudinary upload failed: ${error.message}`));
+        }
+        resolve(result.secure_url);
+      }
+    );
+    uploadStream.end(fileBuffer);
+  });
+};
+
+/**
+ * Helper to extract public ID from Cloudinary URL
+ * @param {string} url 
+ * @returns {string|null}
+ */
+const getPublicIdFromUrl = (url) => {
+  try {
+    const parts = url.split('/');
+    const filenameWithExt = parts.pop();
+    const publicId = filenameWithExt.split('.')[0];
+    // Join the folder path if it exists (everything after 'upload/v<version>/')
+    // This is a simplified extraction, might need adjustment based on exact URL structure
+    // Standard Cloudinary URL: https://res.cloudinary.com/<cloud_name>/image/upload/v<version>/<folder>/<public_id>.<ext>
+
+    const uploadIndex = parts.indexOf('upload');
+    if (uploadIndex === -1) return null;
+
+    // parts after 'upload' might include version 'v12345' which we skip for public_id construction if we use folder
+    // But cloudinary public_id usually includes the folder.
+    // Let's try to reconstruct from the folder known in this app.
+
+    // Better approach: Regex
+    const regex = /\/upload\/(?:v\d+\/)?(.+)\.[a-zA-Z0-9]+$/;
+    const match = url.match(regex);
+    if (match && match[1]) {
+      return match[1];
+    }
+    return null;
+  } catch (e) {
+    return null;
+  }
+};
+
 export const uploadProductImage = async (fileBuffer, fileName, mimeType) => {
   try {
-    const timestamp = Date.now();
-    const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const filePath = `products/${timestamp}-${sanitizedFileName}`;
-
-    const { data, error } = await supabaseAdmin.storage
-      .from('product-images')
-      .upload(filePath, fileBuffer, {
-        contentType: mimeType,
-        cacheControl: '3600',
-        upsert: false
-      });
-
-    if (error) {
-      throw error;
-    }
-
-    const { data: urlData } = supabaseAdmin.storage
-      .from('product-images')
-      .getPublicUrl(data.path);
-
-    return urlData.publicUrl;
+    return await uploadToCloudinary(fileBuffer, 'megg-products', fileName);
   } catch (error) {
     throw new Error(`Failed to upload product image: ${error.message}`);
   }
@@ -31,10 +73,10 @@ export const uploadProductImage = async (fileBuffer, fileName, mimeType) => {
 
 export const uploadMultipleProductImages = async (files) => {
   try {
-    const uploadPromises = files.map(file => 
+    const uploadPromises = files.map(file =>
       uploadProductImage(file.buffer, file.originalname, file.mimetype)
     );
-    
+
     const urls = await Promise.all(uploadPromises);
     return urls;
   } catch (error) {
@@ -44,35 +86,41 @@ export const uploadMultipleProductImages = async (files) => {
 
 export const deleteProductImage = async (imageUrl) => {
   try {
-    let filePath = null;
-
-    try {
-      const parsed = new URL(imageUrl);
-      const pathSegments = parsed.pathname.split('/').filter(Boolean);
-      const idx = pathSegments.findIndex((seg) => seg === 'product-images');
-      if (idx !== -1) {
-        filePath = pathSegments.slice(idx + 1).join('/');
+    // Check if it's a Supabase URL
+    if (imageUrl.includes('supabase.co')) {
+      let filePath = null;
+      try {
+        const parsed = new URL(imageUrl);
+        const pathSegments = parsed.pathname.split('/').filter(Boolean);
+        const idx = pathSegments.findIndex((seg) => seg === 'product-images');
+        if (idx !== -1) {
+          filePath = pathSegments.slice(idx + 1).join('/');
+        }
+      } catch (e) {
+        const match = imageUrl.match(/product-images\/(.+?)(\?|$)/);
+        if (match && match[1]) {
+          filePath = match[1];
+        }
       }
-    } catch (e) {
-      const match = imageUrl.match(/product-images\/(.+?)(\?|$)/);
-      if (match && match[1]) {
-        filePath = match[1];
+
+      if (filePath) {
+        const { error } = await supabaseAdmin.storage
+          .from('product-images')
+          .remove([filePath]);
+        if (error) return false;
+        return true;
+      }
+    }
+    // Check if it's a Cloudinary URL
+    else if (imageUrl.includes('cloudinary.com')) {
+      const publicId = getPublicIdFromUrl(imageUrl);
+      if (publicId) {
+        await cloudinary.uploader.destroy(publicId);
+        return true;
       }
     }
 
-    if (!filePath) {
-      return 'skipped';
-    }
-
-    const { error } = await supabaseAdmin.storage
-      .from('product-images')
-      .remove([filePath]);
-
-    if (error) {
-      return false;
-    }
-
-    return true;
+    return 'skipped';
   } catch (error) {
     return false;
   }
@@ -111,8 +159,8 @@ export const uploadReelVideo = async (fileBuffer, fileName) => {
             return reject(new Error(`Cloudinary upload failed: ${error.message}`));
           }
 
-          const thumbnailUrl = result.eager && result.eager.length > 0 
-            ? result.eager[0].secure_url 
+          const thumbnailUrl = result.eager && result.eager.length > 0
+            ? result.eager[0].secure_url
             : `${result.secure_url.replace(/\.(mp4|mov|avi|webm)$/i, '.jpg')}`;
 
           resolve({
@@ -138,7 +186,7 @@ export const deleteReelVideo = async (videoUrl) => {
     const urlParts = videoUrl.split('/');
     const fileWithExtension = urlParts[urlParts.length - 1];
     const fileName = fileWithExtension.split('.')[0];
-    
+
     const folderIndex = urlParts.findIndex(part => part === 'megg-reels');
     if (folderIndex === -1) {
       return false;
@@ -156,27 +204,7 @@ export const deleteReelVideo = async (videoUrl) => {
 
 export const uploadOfferBanner = async (fileBuffer, fileName, mimeType) => {
   try {
-    const timestamp = Date.now();
-    const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const filePath = `offers/${timestamp}-${sanitizedFileName}`;
-
-    const { data, error } = await supabaseAdmin.storage
-      .from('offer-banners')
-      .upload(filePath, fileBuffer, {
-        contentType: mimeType,
-        cacheControl: '3600',
-        upsert: false
-      });
-
-    if (error) {
-      throw error;
-    }
-
-    const { data: urlData } = supabaseAdmin.storage
-      .from('offer-banners')
-      .getPublicUrl(data.path);
-
-    return urlData.publicUrl;
+    return await uploadToCloudinary(fileBuffer, 'megg-offers', fileName);
   } catch (error) {
     throw new Error(`Failed to upload offer banner: ${error.message}`);
   }
@@ -184,27 +212,7 @@ export const uploadOfferBanner = async (fileBuffer, fileName, mimeType) => {
 
 export const uploadColorComboImage = async (fileBuffer, fileName, mimeType) => {
   try {
-    const timestamp = Date.now();
-    const sanitizedFileName = fileName.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const filePath = `color-combos/${timestamp}-${sanitizedFileName}`;
-
-    const { data, error } = await supabaseAdmin.storage
-      .from('product-images')
-      .upload(filePath, fileBuffer, {
-        contentType: mimeType,
-        cacheControl: '3600',
-        upsert: false
-      });
-
-    if (error) {
-      throw error;
-    }
-
-    const { data: urlData } = supabaseAdmin.storage
-      .from('product-images')
-      .getPublicUrl(data.path);
-
-    return urlData.publicUrl;
+    return await uploadToCloudinary(fileBuffer, 'megg-color-combos', fileName);
   } catch (error) {
     throw new Error(`Failed to upload color combo image: ${error.message}`);
   }
@@ -212,20 +220,26 @@ export const uploadColorComboImage = async (fileBuffer, fileName, mimeType) => {
 
 export const deleteOfferBanner = async (imageUrl) => {
   try {
-    const urlParts = imageUrl.split('/offer-banners/');
-    if (urlParts.length < 2) return false;
+    if (imageUrl.includes('supabase.co')) {
+      const urlParts = imageUrl.split('/offer-banners/');
+      if (urlParts.length < 2) return false;
 
-    const filePath = urlParts[1].split('?')[0];
+      const filePath = urlParts[1].split('?')[0];
 
-    const { error } = await supabaseAdmin.storage
-      .from('offer-banners')
-      .remove([filePath]);
+      const { error } = await supabaseAdmin.storage
+        .from('offer-banners')
+        .remove([filePath]);
 
-    if (error) {
-      return false;
+      if (error) return false;
+      return true;
+    } else if (imageUrl.includes('cloudinary.com')) {
+      const publicId = getPublicIdFromUrl(imageUrl);
+      if (publicId) {
+        await cloudinary.uploader.destroy(publicId);
+        return true;
+      }
     }
-
-    return true;
+    return false;
   } catch (err) {
     return false;
   }
