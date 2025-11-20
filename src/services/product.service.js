@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { NotFoundError } from '../utils/errors.js';
+import { PAGINATION } from '../config/constants.js';
 
 const applySorting = (query, sort) => {
   switch (sort) {
@@ -17,7 +18,9 @@ const applySorting = (query, sort) => {
   }
 };
 export const listProducts = async ({ category, subcategory, color, search, sort, page, limit }) => {
-  const offset = (page - 1) * limit;
+  const p = Number.isInteger(Number(page)) && Number(page) > 0 ? Number(page) : 1;
+  const l = Math.max(1, Math.min(Number.isInteger(Number(limit)) ? Number(limit) : PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT));
+  const offset = (p - 1) * l;
 
   let query = supabaseAdmin
     .from('products')
@@ -27,7 +30,6 @@ export const listProducts = async ({ category, subcategory, color, search, sort,
   if (subcategory) query = query.eq('subcategory', subcategory);
   if (color) query = query.eq('color', color);
   if (search) {
-
     query = query.textSearch('search_vector', search, {
       config: 'english',
       type: 'plain'
@@ -35,7 +37,7 @@ export const listProducts = async ({ category, subcategory, color, search, sort,
   }
 
   query = applySorting(query, sort);
-  query = query.range(offset, offset + limit - 1);
+  query = query.range(offset, offset + l - 1);
 
   const { data, error, count } = await query;
 
@@ -46,14 +48,16 @@ export const listProducts = async ({ category, subcategory, color, search, sort,
   return {
     products: data,
     total: count,
-    page,
-    limit,
-    totalPages: Math.ceil(count / limit)
+    page: p,
+    limit: l,
+    totalPages: Math.ceil(count / l)
   };
 };
 
 export const browseByCategory = async ({ category, subcategory, color, sort = 'popularity', page, limit }) => {
-  const offset = (page - 1) * limit;
+  const p = Number.isInteger(Number(page)) && Number(page) > 0 ? Number(page) : 1;
+  const l = Math.max(1, Math.min(Number.isInteger(Number(limit)) ? Number(limit) : PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT));
+  const offset = (p - 1) * l;
 
   let query = supabaseAdmin
     .from('products')
@@ -64,7 +68,7 @@ export const browseByCategory = async ({ category, subcategory, color, sort = 'p
   if (color) query = query.eq('color', color);
 
   query = applySorting(query, sort);
-  query = query.range(offset, offset + limit - 1);
+  query = query.range(offset, offset + l - 1);
 
   const { data: products, error: productsError, count } = await query;
 
@@ -87,9 +91,9 @@ export const browseByCategory = async ({ category, subcategory, color, sort = 'p
     banners: banners || [],
     products: products || [],
     total: count,
-    page,
-    limit,
-    totalPages: Math.ceil(count / limit),
+    page: p,
+    limit: l,
+    totalPages: Math.ceil(count / l),
     appliedFilters: {
       subcategory,
       color,

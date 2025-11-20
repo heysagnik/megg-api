@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { COLOR_KEYWORDS, STYLE_KEYWORDS, CATEGORY_KEYWORDS, SUBCATEGORY_KEYWORDS } from '../config/searchKeywords.js';
 import { PRODUCT_SUBCATEGORIES, PRODUCT_CATEGORIES } from '../config/constants.js';
+import { PAGINATION } from '../config/constants.js';
 
 const matchWithWordBoundary = (text, keyword) => {
   const regex = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
@@ -224,9 +225,11 @@ export const unifiedSearch = async ({
   color = null,
   sort = 'popularity',
   page = 1,
-  limit = 20
+  limit = PAGINATION.DEFAULT_LIMIT
 }) => {
-  const offset = (page - 1) * limit;
+  const p = Number.isInteger(Number(page)) && Number(page) > 0 ? Number(page) : 1;
+  const l = Math.max(1, Math.min(Number.isInteger(Number(limit)) ? Number(limit) : PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT));
+  const offset = (p - 1) * l;
   const hasExplicitFilters = category || subcategory || color;
 
   let filters = {};
@@ -317,7 +320,7 @@ export const unifiedSearch = async ({
   }
 
   dbQuery = applySorting(dbQuery, sort);
-  dbQuery = dbQuery.range(offset, offset + limit - 1);
+  dbQuery = dbQuery.range(offset, offset + l - 1);
 
   const { data: products, error, count } = await dbQuery;
 
@@ -342,9 +345,9 @@ export const unifiedSearch = async ({
     products: products || [],
     banners,
     total: count || 0,
-    page,
-    limit,
-    totalPages: Math.ceil((count || 0) / limit),
+    page: p,
+    limit: l,
+    totalPages: Math.ceil((count || 0) / l),
     searchMode,
     filters: {
       appliedCategory: appliedCategory || null,
@@ -386,8 +389,10 @@ const applySorting = (query, sort) => {
   }
 };
 
-export const smartSearch = async ({ query, page = 1, limit = 20 }) => {
-  return unifiedSearch({ query, page, limit });
+export const smartSearch = async ({ query, page = 1, limit = PAGINATION.DEFAULT_LIMIT }) => {
+  const p = Number.isInteger(Number(page)) && Number(page) > 0 ? Number(page) : 1;
+  const l = Math.max(1, Math.min(Number.isInteger(Number(limit)) ? Number(limit) : PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT));
+  return unifiedSearch({ query, page: p, limit: l });
 };
 
 export const getSearchSuggestions = async (partialQuery) => {
@@ -451,9 +456,11 @@ export const advancedSearch = async ({
   maxPrice = null,
   brand = null,
   page = 1,
-  limit = 20
+  limit = PAGINATION.DEFAULT_LIMIT
 }) => {
-  const offset = (page - 1) * limit;
+  const p = Number.isInteger(Number(page)) && Number(page) > 0 ? Number(page) : 1;
+  const l = Math.max(1, Math.min(Number.isInteger(Number(limit)) ? Number(limit) : PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT));
+  const offset = (p - 1) * l;
 
   let dbQuery = supabaseAdmin
     .from('products')
@@ -470,7 +477,7 @@ export const advancedSearch = async ({
   }
 
   dbQuery = dbQuery
-    .range(offset, offset + limit - 1)
+    .range(offset, offset + l - 1)
     .order('popularity', { ascending: false })
     .order('created_at', { ascending: false });
 
@@ -483,9 +490,9 @@ export const advancedSearch = async ({
   return {
     products: data || [],
     total: count || 0,
-    page,
-    limit,
-    totalPages: Math.ceil((count || 0) / limit),
+    page: p,
+    limit: l,
+    totalPages: Math.ceil((count || 0) / l),
     appliedFilters: {
       query,
       category,
