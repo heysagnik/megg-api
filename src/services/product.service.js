@@ -228,7 +228,7 @@ export const updateProduct = async (id, updates, newFiles = []) => {
 };
 
 export const deleteProduct = async (id) => {
-  // Fetch product directly to avoid side effects (like incrementing clicks)
+  // Fetch product directly  avoid side effects (like incrementing clicks)
   const { data: product, error: fetchError } = await supabaseAdmin
     .from('products')
     .select('*')
