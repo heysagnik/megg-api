@@ -115,8 +115,16 @@ export const deleteProductImage = async (imageUrl) => {
     else if (imageUrl.includes('cloudinary.com')) {
       const publicId = getPublicIdFromUrl(imageUrl);
       if (publicId) {
-        await cloudinary.uploader.destroy(publicId);
-        return true;
+        console.log(`Attempting to delete Cloudinary image: ${publicId}`);
+        const result = await cloudinary.uploader.destroy(publicId);
+        console.log(`Cloudinary deletion result for ${publicId}:`, result);
+
+        if (result.result === 'ok' || result.result === 'not found') {
+          return true;
+        } else {
+          console.error(`Failed to delete Cloudinary image ${publicId}: ${result.result}`);
+          return false;
+        }
       }
     }
 
@@ -195,8 +203,16 @@ export const deleteReelVideo = async (videoUrl) => {
     const pathSegments = urlParts.slice(folderIndex);
     const publicId = pathSegments.join('/').replace(/\.[^.]+$/, '');
 
-    await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
-    return true;
+    console.log(`Attempting to delete Cloudinary reel video: ${publicId}`);
+    const result = await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
+    console.log(`Cloudinary deletion result for ${publicId}:`, result);
+
+    if (result.result === 'ok' || result.result === 'not found') {
+      return true;
+    } else {
+      console.error(`Failed to delete Cloudinary reel video ${publicId}: ${result.result}`);
+      return false;
+    }
   } catch (error) {
     return false;
   }
@@ -235,8 +251,16 @@ export const deleteOfferBanner = async (imageUrl) => {
     } else if (imageUrl.includes('cloudinary.com')) {
       const publicId = getPublicIdFromUrl(imageUrl);
       if (publicId) {
-        await cloudinary.uploader.destroy(publicId);
-        return true;
+        console.log(`Attempting to delete Cloudinary offer banner: ${publicId}`);
+        const result = await cloudinary.uploader.destroy(publicId);
+        console.log(`Cloudinary deletion result for ${publicId}:`, result);
+
+        if (result.result === 'ok' || result.result === 'not found') {
+          return true;
+        } else {
+          console.error(`Failed to delete Cloudinary offer banner ${publicId}: ${result.result}`);
+          return false;
+        }
       }
     }
     return false;

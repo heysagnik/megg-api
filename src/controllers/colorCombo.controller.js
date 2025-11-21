@@ -33,7 +33,7 @@ export const createColorCombo = async (req, res, next) => {
   try {
     const { name, color_a, color_b, group_type, product_ids } = req.body;
 
-    await validate(createColorComboSchema)({ body: req.body }, res, () => {});
+    await validate(createColorComboSchema)({ body: req.body }, res, () => { });
 
     let modelImageUrl = null;
     if (req.files && req.files.length > 0) {
@@ -63,19 +63,15 @@ export const createColorCombo = async (req, res, next) => {
 
 export const updateColorCombo = async (req, res, next) => {
   try {
-    await validate(updateColorComboSchema)({ params: req.params, body: req.body }, res, () => {});
+    await validate(updateColorComboSchema)({ params: req.params, body: req.body }, res, () => { });
 
     const updates = { ...req.body };
 
     if (req.files && req.files.length > 0) {
       const modelFile = req.files.find(f => f.fieldname === 'model_image');
       if (modelFile) {
-        const { uploadColorComboImage, deleteProductImage } = await import('../services/upload.service.js');
+        const { uploadColorComboImage } = await import('../services/upload.service.js');
         const modelImageUrl = await uploadColorComboImage(modelFile.buffer, modelFile.originalname, modelFile.mimetype);
-        
-        if (req.body.prev_model_image) {
-          await deleteProductImage(req.body.prev_model_image).catch(() => {});
-        }
         updates.model_image = modelImageUrl;
       }
     }
@@ -89,12 +85,6 @@ export const updateColorCombo = async (req, res, next) => {
 
 export const deleteColorCombo = async (req, res, next) => {
   try {
-    const { model_image } = req.body;
-    if (model_image) {
-      const { deleteProductImage } = await import('../services/upload.service.js');
-      await deleteProductImage(model_image).catch(() => {});
-    }
-
     await colorComboService.deleteColorCombo(req.params.id);
 
     res.json({ success: true, message: 'Color combo deleted' });

@@ -68,6 +68,18 @@ export const createReel = async (reelData) => {
 };
 
 export const updateReel = async (id, updates) => {
+  // Fetch existing reel to check for video changes
+  const { data: existingReel } = await supabaseAdmin
+    .from('reels')
+    .select('video_url')
+    .eq('id', id)
+    .single();
+
+  if (existingReel && updates.video_url && existingReel.video_url !== updates.video_url) {
+    const { deleteReelVideo } = await import('./upload.service.js');
+    await deleteReelVideo(existingReel.video_url).catch(err => console.error('Failed to delete old reel video:', err));
+  }
+
   const { data, error } = await supabaseAdmin
     .from('reels')
     .update(updates)

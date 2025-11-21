@@ -62,10 +62,6 @@ export const updateOffer = async (req, res, next) => {
     const existing = await offerService.getOfferById(req.params.id);
 
     if (req.file) {
-      if (existing && existing.banner_image) {
-        await uploadService.deleteOfferBanner(existing.banner_image).catch(() => {});
-      }
-
       const imgUrl = await uploadService.uploadOfferBanner(req.file.buffer, req.file.originalname, req.file.mimetype);
       updates.banner_image = imgUrl;
     }

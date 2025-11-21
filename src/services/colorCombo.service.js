@@ -72,6 +72,18 @@ export const createColorCombo = async (comboData) => {
 };
 
 export const updateColorCombo = async (id, updates) => {
+  // Fetch existing combo to check for image changes
+  const { data: existingCombo } = await supabaseAdmin
+    .from('color_combos')
+    .select('model_image')
+    .eq('id', id)
+    .single();
+
+  if (existingCombo && updates.model_image && existingCombo.model_image !== updates.model_image) {
+    const { deleteProductImage } = await import('./upload.service.js');
+    await deleteProductImage(existingCombo.model_image).catch(err => console.error('Failed to delete old color combo image:', err));
+  }
+
   const { data, error } = await supabaseAdmin
     .from('color_combos')
     .update({ ...updates, updated_at: new Date().toISOString() })
@@ -88,6 +100,18 @@ export const updateColorCombo = async (id, updates) => {
 };
 
 export const deleteColorCombo = async (id) => {
+  // Fetch combo first to get image URL
+  const { data: combo } = await supabaseAdmin
+    .from('color_combos')
+    .select('model_image')
+    .eq('id', id)
+    .single();
+
+  if (combo && combo.model_image) {
+    const { deleteProductImage } = await import('./upload.service.js');
+    await deleteProductImage(combo.model_image);
+  }
+
   const { data, error } = await supabaseAdmin
     .from('color_combos')
     .delete()

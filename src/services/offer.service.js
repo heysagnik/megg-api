@@ -65,6 +65,18 @@ export const createOffer = async (offerData) => {
 };
 
 export const updateOffer = async (id, updates) => {
+  // Fetch existing offer to check for image changes
+  const { data: existingOffer } = await supabaseAdmin
+    .from('offers')
+    .select('banner_image')
+    .eq('id', id)
+    .single();
+
+  if (existingOffer && updates.banner_image && existingOffer.banner_image !== updates.banner_image) {
+    const { deleteOfferBanner } = await import('./upload.service.js');
+    await deleteOfferBanner(existingOffer.banner_image).catch(err => console.error('Failed to delete old offer banner:', err));
+  }
+
   const { data, error } = await supabaseAdmin
     .from('offers')
     .update(updates)
@@ -80,6 +92,18 @@ export const updateOffer = async (id, updates) => {
 };
 
 export const deleteOffer = async (id) => {
+  // Fetch offer first to get image URL
+  const { data: offer } = await supabaseAdmin
+    .from('offers')
+    .select('banner_image')
+    .eq('id', id)
+    .single();
+
+  if (offer && offer.banner_image) {
+    const { deleteOfferBanner } = await import('./upload.service.js');
+    await deleteOfferBanner(offer.banner_image);
+  }
+
   const { error } = await supabaseAdmin
     .from('offers')
     .delete()
