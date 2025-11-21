@@ -1,5 +1,6 @@
 import admin from 'firebase-admin';
 import dotenv from 'dotenv';
+import logger from '../utils/logger.js';
 
 dotenv.config();
 
@@ -14,7 +15,7 @@ export const initializeFirebase = () => {
     const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
 
     if (!serviceAccountKey) {
-      console.warn('FIREBASE_SERVICE_ACCOUNT_KEY not set. FCM features will be disabled.');
+      logger.warn('FIREBASE_SERVICE_ACCOUNT_KEY not set. FCM features will be disabled.');
       return null;
     }
 
@@ -25,10 +26,10 @@ export const initializeFirebase = () => {
       credential: admin.credential.cert(serviceAccount)
     });
 
-    console.log('Firebase Admin SDK initialized successfully');
+    logger.info('Firebase Admin SDK initialized successfully');
     return firebaseApp;
   } catch (error) {
-    console.error('Failed to initialize Firebase Admin SDK:', error.message);
+    logger.error(`Failed to initialize Firebase Admin SDK: ${error.message}`);
     return null;
   }
 };

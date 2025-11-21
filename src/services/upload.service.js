@@ -1,5 +1,6 @@
 import cloudinary from '../config/cloudinary.js';
 import { supabaseAdmin } from '../config/supabase.js';
+import logger from '../utils/logger.js';
 
 /**
  * Helper to upload a file buffer to Cloudinary
@@ -115,14 +116,14 @@ export const deleteProductImage = async (imageUrl) => {
     else if (imageUrl.includes('cloudinary.com')) {
       const publicId = getPublicIdFromUrl(imageUrl);
       if (publicId) {
-        console.log(`Attempting to delete Cloudinary image: ${publicId}`);
+        logger.info(`Attempting to delete Cloudinary image: ${publicId}`);
         const result = await cloudinary.uploader.destroy(publicId);
-        console.log(`Cloudinary deletion result for ${publicId}:`, result);
+        logger.info(`Cloudinary deletion result for ${publicId}: ${JSON.stringify(result)}`);
 
         if (result.result === 'ok' || result.result === 'not found') {
           return true;
         } else {
-          console.error(`Failed to delete Cloudinary image ${publicId}: ${result.result}`);
+          logger.error(`Failed to delete Cloudinary image ${publicId}: ${result.result}`);
           return false;
         }
       }
@@ -203,14 +204,14 @@ export const deleteReelVideo = async (videoUrl) => {
     const pathSegments = urlParts.slice(folderIndex);
     const publicId = pathSegments.join('/').replace(/\.[^.]+$/, '');
 
-    console.log(`Attempting to delete Cloudinary reel video: ${publicId}`);
+    logger.info(`Attempting to delete Cloudinary reel video: ${publicId}`);
     const result = await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
-    console.log(`Cloudinary deletion result for ${publicId}:`, result);
+    logger.info(`Cloudinary deletion result for ${publicId}: ${JSON.stringify(result)}`);
 
     if (result.result === 'ok' || result.result === 'not found') {
       return true;
     } else {
-      console.error(`Failed to delete Cloudinary reel video ${publicId}: ${result.result}`);
+      logger.error(`Failed to delete Cloudinary reel video ${publicId}: ${result.result}`);
       return false;
     }
   } catch (error) {
@@ -251,14 +252,14 @@ export const deleteOfferBanner = async (imageUrl) => {
     } else if (imageUrl.includes('cloudinary.com')) {
       const publicId = getPublicIdFromUrl(imageUrl);
       if (publicId) {
-        console.log(`Attempting to delete Cloudinary offer banner: ${publicId}`);
+        logger.info(`Attempting to delete Cloudinary offer banner: ${publicId}`);
         const result = await cloudinary.uploader.destroy(publicId);
-        console.log(`Cloudinary deletion result for ${publicId}:`, result);
+        logger.info(`Cloudinary deletion result for ${publicId}: ${JSON.stringify(result)}`);
 
         if (result.result === 'ok' || result.result === 'not found') {
           return true;
         } else {
-          console.error(`Failed to delete Cloudinary offer banner ${publicId}: ${result.result}`);
+          logger.error(`Failed to delete Cloudinary offer banner ${publicId}: ${result.result}`);
           return false;
         }
       }

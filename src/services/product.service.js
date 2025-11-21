@@ -70,17 +70,23 @@ export const browseByCategory = async ({ category, subcategory, color, sort = 'p
   query = applySorting(query, sort);
   query = query.range(offset, offset + l - 1);
 
-  const { data: products, error: productsError, count } = await query;
-
-  if (productsError) {
-    throw new Error(`Failed to fetch products: ${productsError.message}`);
-  }
-
-  const { data: banners, error: bannersError } = await supabaseAdmin
+  const bannersQuery = supabaseAdmin
     .from('category_banners')
     .select('id, banner_image, link, display_order')
     .eq('category', category)
     .order('display_order', { ascending: true });
+
+  const [productsResult, bannersResult] = await Promise.all([
+    query,
+    bannersQuery
+  ]);
+
+  const { data: products, error: productsError, count } = productsResult;
+  const { data: banners, error: bannersError } = bannersResult;
+
+  if (productsError) {
+    throw new Error(`Failed to fetch products: ${productsError.message}`);
+  }
 
   if (bannersError) {
     throw new Error(`Failed to fetch category banners: ${bannersError.message}`);

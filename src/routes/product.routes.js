@@ -2,6 +2,7 @@ import express from 'express';
 import * as productController from '../controllers/product.controller.js';
 import { authenticate, requireAdmin } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
+import { publicCache } from '../middleware/cacheControl.js';
 import {
   listProductsSchema,
   browseCategorySchema,
@@ -14,10 +15,10 @@ import { uploadImages, uploadImagesHandler, normalizeProductUpdateData } from '.
 
 const router = express.Router();
 
-router.get('/', generalLimiter, validate(listProductsSchema), productController.listProducts);
-router.get('/browse/:category', generalLimiter, validate(browseCategorySchema), productController.browseByCategory);
-router.get('/:id', generalLimiter, validate(productIdSchema), productController.getProduct);
-router.get('/:id/related', generalLimiter, validate(productIdSchema), productController.getRelatedProducts);
+router.get('/', generalLimiter, publicCache(60), validate(listProductsSchema), productController.listProducts);
+router.get('/browse/:category', generalLimiter, publicCache(60), validate(browseCategorySchema), productController.browseByCategory);
+router.get('/:id', generalLimiter, publicCache(60), validate(productIdSchema), productController.getProduct);
+router.get('/:id/related', generalLimiter, publicCache(120), validate(productIdSchema), productController.getRelatedProducts);
 
 router.post('/upload-images', authenticate, requireAdmin, adminLimiter, uploadImagesHandler, productController.uploadProductImages);
 router.post('/', authenticate, requireAdmin, adminLimiter, uploadImagesHandler, productController.createProduct);

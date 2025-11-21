@@ -1,7 +1,6 @@
 import * as productService from '../services/product.service.js';
 import * as uploadService from '../services/upload.service.js';
 import * as searchService from '../services/search.service.js';
-import cache from '../utils/cache.js';
 
 export const uploadProductImages = async (req, res, next) => {
   try {
@@ -27,17 +26,6 @@ export const uploadProductImages = async (req, res, next) => {
 
 export const listProducts = async (req, res, next) => {
   try {
-    const cacheKey = `products:${req.originalUrl}`;
-    const cachedData = cache.get(cacheKey);
-
-    if (cachedData) {
-      return res.json({
-        success: true,
-        data: cachedData,
-        source: 'cache'
-      });
-    }
-
     let result;
     if (req.query.search) {
       // Use unified search service for smart search capabilities
@@ -48,8 +36,6 @@ export const listProducts = async (req, res, next) => {
     } else {
       result = await productService.listProducts(req.query);
     }
-
-    cache.set(cacheKey, result);
 
     res.json({
       success: true,
@@ -62,23 +48,10 @@ export const listProducts = async (req, res, next) => {
 
 export const browseByCategory = async (req, res, next) => {
   try {
-    const cacheKey = `category:${req.originalUrl}`;
-    const cachedData = cache.get(cacheKey);
-
-    if (cachedData) {
-      return res.json({
-        success: true,
-        data: cachedData,
-        source: 'cache'
-      });
-    }
-
     const result = await productService.browseByCategory({
       category: req.params.category,
       ...req.query
     });
-
-    cache.set(cacheKey, result);
 
     res.json({
       success: true,
@@ -134,9 +107,6 @@ export const createProduct = async (req, res, next) => {
 
     const product = await productService.createProduct(productData);
 
-    // Invalidate cache on new product
-    cache.flushAll();
-
     res.status(201).json({
       success: true,
       data: product
@@ -153,9 +123,6 @@ export const updateProduct = async (req, res, next) => {
 
     const product = await productService.updateProduct(req.params.id, updates, files);
 
-    // Invalidate cache on update
-    cache.flushAll();
-
     res.json({
       success: true,
       data: product
@@ -169,9 +136,6 @@ export const deleteProduct = async (req, res, next) => {
   try {
     await productService.deleteProduct(req.params.id);
 
-    // Invalidate cache on delete
-    cache.flushAll();
-
     res.json({
       success: true,
       message: 'Product deleted successfully'
@@ -180,4 +144,3 @@ export const deleteProduct = async (req, res, next) => {
     next(error);
   }
 };
-

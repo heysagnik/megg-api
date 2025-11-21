@@ -24,13 +24,24 @@ const colors = {
 
 winston.addColors(colors);
 
-const format = winston.format.combine(
-    winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
-    winston.format.colorize({ all: true }),
-    winston.format.printf(
-        (info) => `${info.timestamp} ${info.level}: ${info.message}`,
-    ),
-);
+const getFormat = () => {
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    if (isProduction) {
+        return winston.format.combine(
+            winston.format.timestamp(),
+            winston.format.json()
+        );
+    }
+
+    return winston.format.combine(
+        winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
+        winston.format.colorize({ all: true }),
+        winston.format.printf(
+            (info) => `${info.timestamp} ${info.level}: ${info.message}`,
+        ),
+    );
+};
 
 const transports = [
     new winston.transports.Console(),
@@ -39,7 +50,7 @@ const transports = [
 const logger = winston.createLogger({
     level: level(),
     levels,
-    format,
+    format: getFormat(),
     transports,
 });
 

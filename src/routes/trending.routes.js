@@ -2,6 +2,7 @@ import express from 'express';
 import * as trendingController from '../controllers/trending.controller.js';
 import { optionalAuth } from '../middleware/auth.js';
 import { generalLimiter } from '../middleware/rateLimiter.js';
+import { publicCache } from '../middleware/cacheControl.js';
 import { z } from 'zod';
 import { validate } from '../middleware/validate.js';
 
@@ -13,7 +14,7 @@ const productIdSchema = z.object({
   })
 });
 
-router.get('/products', generalLimiter, trendingController.getTrendingProducts);
+router.get('/products', generalLimiter, publicCache(300), trendingController.getTrendingProducts);
 router.post('/click/:productId', optionalAuth, generalLimiter, validate(productIdSchema), trendingController.trackClick);
 
 export default router;

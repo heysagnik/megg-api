@@ -400,6 +400,7 @@ export const unifiedSearch = async ({
   // --- Fetch Banners ---
   let banners = [];
   const appliedCategory = filters.category || category;
+
   if (appliedCategory) {
     const { data: categoryBanners } = await supabaseAdmin
       .from('category_banners')
