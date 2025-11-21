@@ -283,8 +283,6 @@ const applySorting = (query, sort) => {
       return query.order('created_at', { ascending: false });
     case 'oldest':
       return query.order('created_at', { ascending: true });
-    case 'clicks':
-      return query.order('clicks', { ascending: false });
     default:
       return query.order('popularity', { ascending: false }).order('created_at', { ascending: false });
   }

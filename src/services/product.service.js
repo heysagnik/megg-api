@@ -113,12 +113,21 @@ export const getProductById = async (id) => {
     throw new NotFoundError('Product not found');
   }
 
-  // Fire and forget click increment, ignore errors
-  supabaseAdmin.rpc('increment_product_clicks', { product_id: id }).then(() => {});
+  
+  supabaseAdmin
+    .from('products')
+    .update({ popularity: (data.popularity || 0) + 1 })
+    .eq('id', id)
+    .then(() => {});
 
   const recommended = await getRecommendedProducts(data.suggested_colors, id);
 
   return { product: data, recommended };
+};
+
+export const incrementProductClicks = async (id) => {
+  // Use the existing RPC for clicks
+  await supabaseAdmin.rpc('increment_product_clicks', { product_id: id });
 };
 
 export const getRecommendedProducts = async (suggestedColors, excludeId) => {

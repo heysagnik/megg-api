@@ -181,3 +181,12 @@ export const deleteProduct = async (req, res, next) => {
   }
 };
 
+export const trackProductClick = async (req, res, next) => {
+  try {
+    await productService.incrementProductClicks(req.params.id);
+    res.json({ success: true, message: 'Click tracked' });
+  } catch (error) {
+    next(error);
+  }
+};
+

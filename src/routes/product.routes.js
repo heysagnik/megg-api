@@ -17,6 +17,7 @@ const router = express.Router();
 router.get('/', generalLimiter, validate(listProductsSchema), productController.listProducts);
 router.get('/browse/:category', generalLimiter, validate(browseCategorySchema), productController.browseByCategory);
 router.get('/:id', generalLimiter, validate(productIdSchema), productController.getProduct);
+router.post('/:id/click', generalLimiter, validate(productIdSchema), productController.trackProductClick);
 router.get('/:id/related', generalLimiter, validate(productIdSchema), productController.getRelatedProducts);
 
 router.post('/upload-images', authenticate, requireAdmin, adminLimiter, uploadImagesHandler, productController.uploadProductImages);
