@@ -76,14 +76,14 @@ export const VIDEO_CATEGORIES = [
   'Office fit',
   'Layering outfit',
   'Winter fit',
-  'Festive fit',
+  'Wedding fit',
   'Travel fit',
   'Personality development',
   'Date fit',
   'Colour combo',
   'College fit',
   'Party fit',
-  'Airport look'
+
 ];
 
 export const PAGINATION = {
