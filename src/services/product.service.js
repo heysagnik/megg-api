@@ -70,21 +70,22 @@ export const browseByCategory = async ({ category, subcategory, color, sort = 'p
   query = applySorting(query, sort);
   query = query.range(offset, offset + l - 1);
 
-  const { data: products, error: productsError, count } = await query;
+  const productsPromise = query.then(({ data, error, count }) => {
+    if (error) throw new Error(`Failed to fetch products: ${error.message}`);
+    return { data, count };
+  });
 
-  if (productsError) {
-    throw new Error(`Failed to fetch products: ${productsError.message}`);
-  }
-
-  const { data: banners, error: bannersError } = await supabaseAdmin
+  const bannersPromise = supabaseAdmin
     .from('category_banners')
     .select('id, banner_image, link, display_order')
     .eq('category', category)
-    .order('display_order', { ascending: true });
+    .order('display_order', { ascending: true })
+    .then(({ data, error }) => {
+      if (error) throw new Error(`Failed to fetch category banners: ${error.message}`);
+      return data;
+    });
 
-  if (bannersError) {
-    throw new Error(`Failed to fetch category banners: ${bannersError.message}`);
-  }
+  const [{ data: products, count }, banners] = await Promise.all([productsPromise, bannersPromise]);
 
   return {
     category,
@@ -150,12 +151,21 @@ export const getRecommendedProducts = async (suggestedColors, excludeId) => {
 };
 
 export const getRelatedProducts = async (id) => {
-  const product = await getProductById(id);
+  // Optimize: Fetch only category instead of full product details
+  const { data: product, error: productError } = await supabaseAdmin
+    .from('products')
+    .select('category')
+    .eq('id', id)
+    .single();
+
+  if (productError || !product) {
+    throw new NotFoundError('Product not found');
+  }
 
   const { data, error } = await supabaseAdmin
     .from('products')
     .select('id, name, price, brand, images, color, category, subcategory')
-    .eq('category', product.product.category)
+    .eq('category', product.category)
     .neq('id', id)
     .order('popularity', { ascending: false })
     .limit(8);

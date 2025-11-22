@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { getMessaging } from '../config/firebase.js';
+import logger from '../utils/logger.js';
 
 // Send notification to all users and save to database
 export const sendNotificationToAll = async (title, body, image, link) => {
@@ -65,7 +66,7 @@ export const sendNotificationToAll = async (title, body, image, link) => {
       fcm_message_id: response
     };
   } catch (error) {
-    console.error('FCM send error:', error);
+    logger.error(`FCM send error: ${error.message}`);
     // Notification is still saved in DB even if FCM fails
     return {
       success: true,
