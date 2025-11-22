@@ -6,6 +6,39 @@ import logger from '../utils/logger.js';
 
 // --- Helpers ---
 
+const correctSpelling = (word) => {
+  const lowerWord = word.toLowerCase();
+
+  // Check colors
+  for (const [color, variations] of Object.entries(COLOR_KEYWORDS)) {
+    if (color.toLowerCase() === lowerWord) return color;
+    for (const v of variations) {
+      if (v === lowerWord) return color;
+      if (levenshteinDistance(v, lowerWord) <= 1 && lowerWord.length > 3) return color;
+    }
+  }
+
+  // Check subcategories
+  for (const [sub, keywords] of Object.entries(SUBCATEGORY_KEYWORDS)) {
+    if (sub.toLowerCase() === lowerWord) return sub;
+    for (const k of keywords) {
+      if (k === lowerWord) return sub;
+      if (levenshteinDistance(k, lowerWord) <= 1 && lowerWord.length > 3) return sub;
+    }
+  }
+
+  // Check categories
+  for (const [cat, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+    if (cat.toLowerCase() === lowerWord) return cat;
+    for (const k of keywords) {
+      if (k === lowerWord) return cat;
+      if (levenshteinDistance(k, lowerWord) <= 1 && lowerWord.length > 3) return cat;
+    }
+  }
+
+  return word; // Return original if no correction found
+};
+
 const levenshteinDistance = (a, b) => {
   if (a.length === 0) return b.length;
   if (b.length === 0) return a.length;
@@ -454,6 +487,12 @@ export const getSearchSuggestions = async (partialQuery) => {
   }
 
   const normalizedQuery = partialQuery.toLowerCase().trim();
+  const words = normalizedQuery.split(/\s+/);
+
+  // Correct spelling of each word
+  const correctedWords = words.map(word => correctSpelling(word));
+  const correctedQuery = correctedWords.join(' ');
+
   const suggestions = {
     top_queries: [],
     categories: [],
@@ -462,20 +501,41 @@ export const getSearchSuggestions = async (partialQuery) => {
     products: []
   };
 
-  // 1. Parse the query to see what we already understand
-  const parsed = parseSearchQuery(partialQuery);
+  // Identify known entities from corrected words
+  const detectedColor = correctedWords.find(w => Object.keys(COLOR_KEYWORDS).some(k => k.toLowerCase() === w.toLowerCase() || COLOR_KEYWORDS[k].includes(w.toLowerCase())));
+  const detectedCategory = correctedWords.find(w => Object.keys(CATEGORY_KEYWORDS).some(k => k.toLowerCase() === w.toLowerCase() || CATEGORY_KEYWORDS[k].includes(w.toLowerCase())));
+  const detectedSubcategory = correctedWords.find(w => Object.keys(SUBCATEGORY_KEYWORDS).some(k => k.toLowerCase() === w.toLowerCase() || SUBCATEGORY_KEYWORDS[k].includes(w.toLowerCase())));
+
+  // Determine Canonical Entity Names (Capitalized)
+  const canonicalColor = detectedColor ? Object.keys(COLOR_KEYWORDS).find(k => k.toLowerCase() === detectedColor.toLowerCase() || COLOR_KEYWORDS[k].includes(detectedColor.toLowerCase())) : null;
+  const canonicalCategory = detectedCategory ? Object.keys(CATEGORY_KEYWORDS).find(k => k.toLowerCase() === detectedCategory.toLowerCase() || CATEGORY_KEYWORDS[k].includes(detectedCategory.toLowerCase())) : null;
+  const canonicalSubcategory = detectedSubcategory ? Object.keys(SUBCATEGORY_KEYWORDS).find(k => k.toLowerCase() === detectedSubcategory.toLowerCase() || SUBCATEGORY_KEYWORDS[k].includes(detectedSubcategory.toLowerCase())) : null;
+
 
   // 2. Fetch relevant products to generate "Predictive Queries" based on actual inventory
   try {
-    const { data: products } = await supabaseAdmin
+    let dbQuery = supabaseAdmin
       .from('products')
-      .select('name, brand, category, subcategory, color, popularity')
-      .textSearch('search_vector', `${normalizedQuery}:*`, {
-        config: 'english',
-        type: 'plain'
-      })
+      .select('name, brand, category, subcategory, color, popularity');
+
+    // Use corrected query for text search
+    if (canonicalColor) {
+        dbQuery = dbQuery.eq('color', canonicalColor);
+    } else if (canonicalSubcategory) {
+        dbQuery = dbQuery.eq('subcategory', canonicalSubcategory);
+    } else if (canonicalCategory) {
+        dbQuery = dbQuery.eq('category', canonicalCategory);
+    } else {
+        // Fallback to text search with corrected query
+        dbQuery = dbQuery.textSearch('search_vector', `${correctedQuery}:*`, {
+            config: 'english',
+            type: 'plain'
+        });
+    }
+
+    const { data: products } = await dbQuery
       .order('popularity', { ascending: false })
-      .limit(20); // Fetch enough to find patterns
+      .limit(20);
 
     if (products?.length) {
       // A. Generate Product Suggestions (Names/Brands)
@@ -485,85 +545,76 @@ export const getSearchSuggestions = async (partialQuery) => {
       });
       suggestions.products = Array.from(names).slice(0, 5);
 
-      // B. Generate Predictive "Top Queries"
-      // We look for common patterns in the results:
-      // - "{Color} {Subcategory}" (e.g., "Black Hoodies")
-      // - "{Brand} {Subcategory}" (e.g., "Nike Shoes")
-      // - "{Subcategory}" (if query matches prefix)
-
+      // B. Generate Predictive "Top Queries" with Natural Language Combination
       const patterns = new Map();
 
       products.forEach(p => {
         const sub = p.subcategory || p.category;
         if (!sub) return;
 
-        // Pattern 1: Color + Subcategory
-        if (p.color) {
-          const query = `${p.color} ${sub}`;
-          // Only suggest if it adds value to the user's current input
-          // or if the user's input matches part of it
-          if (query.toLowerCase().includes(normalizedQuery) || isFuzzyMatch(query, normalizedQuery)) {
-            patterns.set(query, (patterns.get(query) || 0) + p.popularity);
-          }
+        // Priority 1: Color + Subcategory (e.g., "Black Trackpants")
+        if (canonicalColor && p.color === canonicalColor) {
+            const query = `${p.color} ${sub}`;
+            patterns.set(query, (patterns.get(query) || 0) + p.popularity + 100);
         }
 
-        // Pattern 2: Brand + Subcategory
-        if (p.brand) {
-          const query = `${p.brand} ${sub}`;
-          if (query.toLowerCase().includes(normalizedQuery)) {
-            patterns.set(query, (patterns.get(query) || 0) + p.popularity);
-          }
+        // Priority 2: Brand + Subcategory (e.g., "Nike Shoes")
+        if (p.brand && !canonicalColor) { // Only prioritize brand if we aren't locked on color
+             const query = `${p.brand} ${sub}`;
+             patterns.set(query, (patterns.get(query) || 0) + p.popularity);
         }
 
-        // Pattern 3: Just Subcategory (if it matches query prefix)
-        if (sub.toLowerCase().includes(normalizedQuery)) {
-          patterns.set(sub, (patterns.get(sub) || 0) + p.popularity);
-        }
+        // Priority 3: Just Subcategory/Category
+        patterns.set(sub, (patterns.get(sub) || 0) + p.popularity);
       });
+
+      // If we detected a color but no specific products were strongly matched, force suggest "Color + Category"
+      if (canonicalColor && patterns.size === 0) {
+           // Suggest top categories for this color
+           const validCategories = ['Hoodies', 'Tshirt', 'Jeans', 'Shirt', 'Shoes']; // Common ones
+           validCategories.forEach(cat => {
+               patterns.set(`${canonicalColor} ${cat}`, 50);
+           });
+      }
 
       // Sort patterns by score (popularity sum)
       const sortedPatterns = Array.from(patterns.entries())
         .sort((a, b) => b[1] - a[1])
         .map(entry => entry[0])
-        .slice(0, 3);
+        .slice(0, 5);
 
       suggestions.top_queries = sortedPatterns.map(q => ({
         query: q,
-        label: q // Simple label for now
+        label: q
       }));
     }
   } catch (err) {
     logger.error(`Suggestion fetch failed: ${err.message}`);
   }
 
-  // 3. Fallback: If no dynamic patterns found, use the parsed query construction
-  if (suggestions.top_queries.length === 0) {
-    const parts = [];
-    if (parsed.color) parts.push(parsed.color);
-    if (parsed.subcategory) parts.push(parsed.subcategory);
-    else if (parsed.category) parts.push(parsed.category);
-    if (parsed.searchTerm) parts.push(parsed.searchTerm);
-
-    const constructedQuery = parts.join(' ');
-    if (constructedQuery && constructedQuery.toLowerCase() !== normalizedQuery) {
-      suggestions.top_queries.push({
-        query: constructedQuery,
-        label: constructedQuery
-      });
-    }
+  // 3. Static Data Suggestions (Fuzzy) - Keep these for categorization
+  if (canonicalCategory && !suggestions.categories.includes(canonicalCategory)) {
+      suggestions.categories.push(canonicalCategory);
+  }
+  if (canonicalColor && !suggestions.colors.includes(canonicalColor)) {
+      suggestions.colors.push(canonicalColor);
   }
 
-  // 4. Static Data Suggestions (Fuzzy) - Keep these for categorization
-  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    if (keywords.some(kw => isFuzzyMatch(normalizedQuery, kw))) {
-      if (!suggestions.categories.includes(category)) suggestions.categories.push(category);
-    }
+  // Add fuzzy matches for static lists if direct detection failed
+  if (!canonicalCategory) {
+      for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+        if (keywords.some(kw => isFuzzyMatch(normalizedQuery, kw))) {
+          if (!suggestions.categories.includes(category)) suggestions.categories.push(category);
+        }
+      }
   }
 
-  for (const [color, variations] of Object.entries(COLOR_KEYWORDS)) {
-    if (variations.some(v => isFuzzyMatch(normalizedQuery, v))) {
-      if (!suggestions.colors.includes(color)) suggestions.colors.push(color);
-    }
+  if (!canonicalColor) {
+      for (const [color, variations] of Object.entries(COLOR_KEYWORDS)) {
+        if (variations.some(v => isFuzzyMatch(normalizedQuery, v))) {
+          if (!suggestions.colors.includes(color)) suggestions.colors.push(color);
+        }
+      }
   }
 
   return suggestions;
