@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { COLOR_KEYWORDS, STYLE_KEYWORDS, CATEGORY_KEYWORDS, SUBCATEGORY_KEYWORDS } from '../config/searchKeywords.js';
 import { PRODUCT_SUBCATEGORIES, PRODUCT_CATEGORIES } from '../config/constants.js';
 import { PAGINATION } from '../config/constants.js';
+import logger from '../utils/logger.js';
 
 // --- Helpers ---
 
@@ -373,9 +374,25 @@ export const unifiedSearch = async ({
   dbQuery = applySorting(dbQuery, sort);
   dbQuery = dbQuery.range(offset, offset + l - 1);
 
-  let { data: products, error, count } = await dbQuery;
+  const productsPromise = dbQuery.then(({ data, error, count }) => {
+    if (error) throw new Error(`Search failed: ${error.message}`);
+    return { data, count };
+  });
 
-  if (error) throw new Error(`Search failed: ${error.message}`);
+  // --- Fetch Banners (Parallel) ---
+  const appliedCategory = filters.category || category;
+  let bannersPromise = Promise.resolve([]);
+
+  if (appliedCategory) {
+    bannersPromise = supabaseAdmin
+      .from('category_banners')
+      .select('id, banner_image, link, title, display_order')
+      .eq('category', appliedCategory)
+      .order('display_order', { ascending: true })
+      .then(({ data }) => data || []);
+  }
+
+  let [{ data: products, count }, banners] = await Promise.all([productsPromise, bannersPromise]);
 
   let isFuzzyFallback = false;
 
@@ -393,18 +410,6 @@ export const unifiedSearch = async ({
       count = relaxedCount;
       isFuzzyFallback = true;
     }
-  }
-
-  // --- Fetch Banners ---
-  let banners = [];
-  const appliedCategory = filters.category || category;
-  if (appliedCategory) {
-    const { data: categoryBanners } = await supabaseAdmin
-      .from('category_banners')
-      .select('id, banner_image, link, title, display_order')
-      .eq('category', appliedCategory)
-      .order('display_order', { ascending: true });
-    banners = categoryBanners || [];
   }
 
   return {
@@ -528,7 +533,7 @@ export const getSearchSuggestions = async (partialQuery) => {
       }));
     }
   } catch (err) {
-    console.error('Suggestion fetch failed:', err);
+    logger.error(`Suggestion fetch failed: ${err.message}`);
   }
 
   // 3. Fallback: If no dynamic patterns found, use the parsed query construction
