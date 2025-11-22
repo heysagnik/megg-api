@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { NotFoundError } from '../utils/errors.js';
+import logger from '../utils/logger.js';
 
 export const listAllReels = async () => {
   const { data: reels, error } = await supabaseAdmin
@@ -77,7 +78,7 @@ export const updateReel = async (id, updates) => {
 
   if (existingReel && updates.video_url && existingReel.video_url !== updates.video_url) {
     const { deleteReelVideo } = await import('./upload.service.js');
-    await deleteReelVideo(existingReel.video_url).catch(err => console.error('Failed to delete old reel video:', err));
+    await deleteReelVideo(existingReel.video_url).catch(err => logger.error(`Failed to delete old reel video: ${err.message}`));
   }
 
   const { data, error } = await supabaseAdmin

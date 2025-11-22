@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { NotFoundError } from '../utils/errors.js';
+import logger from '../utils/logger.js';
 
 export const listOffers = async ({ page, limit }) => {
   const offset = (page - 1) * limit;
@@ -74,7 +75,7 @@ export const updateOffer = async (id, updates) => {
 
   if (existingOffer && updates.banner_image && existingOffer.banner_image !== updates.banner_image) {
     const { deleteOfferBanner } = await import('./upload.service.js');
-    await deleteOfferBanner(existingOffer.banner_image).catch(err => console.error('Failed to delete old offer banner:', err));
+    await deleteOfferBanner(existingOffer.banner_image).catch(err => logger.error(`Failed to delete old offer banner: ${err.message}`));
   }
 
   const { data, error } = await supabaseAdmin
