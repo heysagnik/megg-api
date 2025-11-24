@@ -187,7 +187,6 @@ export const SUBCATEGORY_KEYWORDS = {
   'Travel Essentials': ['travel essentials', 'travel', 'luggage'],
   'Grooming Tools': ['grooming tools', 'grooming', 'trimmer', 'razor'],
   'Electronics': ['electronics', 'gadgets', 'tech'],
-  'Cleaning & Care': ['cleaning', 'care', 'cleaning tools'],
   'Everyday Carry': ['everyday carry', 'edc', 'carry'],
   'Home Essentials': ['home essentials', 'home', 'household']
 };

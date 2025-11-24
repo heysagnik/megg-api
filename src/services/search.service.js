@@ -86,12 +86,17 @@ const isQueryRedundantWithFilters = (query, category, subcategory) => {
 
 const findBestCategoryMatch = (queryWords) => {
   const scores = [];
+  const fullQuery = queryWords.filter(Boolean).join(' ').toLowerCase();
 
   for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
     for (const keyword of keywords) {
       const keywordLower = keyword.toLowerCase();
 
-      // Check against each word in query
+      if (keywordLower.includes(' ') && fullQuery.includes(keywordLower)) {
+        scores.push({ category, score: 100, keyword, matchedIndex: -1 }); // -1 indicates phrase match
+        continue;
+      }
+
       queryWords.forEach((word, index) => {
         if (!word) return;
 
