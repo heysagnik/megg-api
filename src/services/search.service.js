@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '../config/supabase.js';
-import { COLOR_KEYWORDS, STYLE_KEYWORDS, CATEGORY_KEYWORDS, SUBCATEGORY_KEYWORDS } from '../config/searchKeywords.js';
+import { COLOR_KEYWORDS, STYLE_KEYWORDS, CATEGORY_KEYWORDS, SUBCATEGORY_KEYWORDS, BRAND_KEYWORDS } from '../config/searchKeywords.js';
 import { PRODUCT_SUBCATEGORIES, PRODUCT_CATEGORIES } from '../config/constants.js';
 import { PAGINATION } from '../config/constants.js';
 import logger from '../utils/logger.js';
@@ -183,11 +183,13 @@ export const parseSearchQuery = (query) => {
     subcategory: null,
     color: null,
     style: null,
+    brand: null,
     categories: [],
     searchTerm: null,
     isDirectCategoryMatch: false,
     isSubcategoryMatch: false,
-    isStyleSearch: false
+    isStyleSearch: false,
+    isBrandMatch: false
   };
 
   // Helper to get unused words
@@ -217,7 +219,30 @@ export const parseSearchQuery = (query) => {
     if (foundColor) break;
   }
 
-  // 2. Extract Category
+  for (const [brand, variations] of Object.entries(BRAND_KEYWORDS)) {
+    let foundBrand = false;
+    const unusedQuery = getUnusedWords().filter(Boolean).join(' ');
+    for (const v of variations) {
+      if (isFuzzyMatch(unusedQuery, v)) {
+        filters.brand = brand;
+        filters.isBrandMatch = true;
+
+        const vWords = v.split(/\s+/);
+        let matchCount = 0;
+        words.forEach((word, index) => {
+          if (usedIndices.has(index)) return;
+          if (matchCount < vWords.length && isFuzzyMatch(word, vWords[matchCount])) {
+            usedIndices.add(index);
+            matchCount++;
+          }
+        });
+        foundBrand = true;
+        break;
+      }
+    }
+    if (foundBrand) break;
+  }
+
   const bestCategoryMatch = findBestCategoryMatch(getUnusedWords());
   if (bestCategoryMatch) {
     filters.category = bestCategoryMatch.category;
@@ -225,12 +250,10 @@ export const parseSearchQuery = (query) => {
     usedIndices.add(bestCategoryMatch.matchedIndex);
   }
 
-  // 3. Extract Subcategory
   const bestSubMatch = findBestSubcategoryMatch(getUnusedWords(), filters.category);
   if (bestSubMatch) {
     const { subcategory, matchedIndex } = bestSubMatch;
 
-    // Validate hierarchy
     let isValid = true;
     if (filters.category) {
       const validSubs = PRODUCT_SUBCATEGORIES[filters.category] || [];
@@ -244,11 +267,7 @@ export const parseSearchQuery = (query) => {
     }
   }
 
-  // 4. Extract Style (if no category/sub yet)
   if (!filters.category && !filters.subcategory) {
-    // Style extraction logic (simplified for token matching)
-    // ... (omitted for brevity, assuming style is less critical for "blck trackpnt" case, but keeping existing logic structure if needed)
-    // For now, let's skip complex style extraction on tokens to keep it simple, or iterate words.
     for (const [style, config] of Object.entries(STYLE_KEYWORDS)) {
       let foundStyle = false;
       words.forEach((word, index) => {
@@ -265,7 +284,6 @@ export const parseSearchQuery = (query) => {
     }
   }
 
-  // 5. Determine Search Term
   const remainingWords = words.filter((_, i) => !usedIndices.has(i));
   filters.searchTerm = remainingWords.length > 0 ? remainingWords.join(' ') : null;
 
@@ -294,6 +312,7 @@ export const unifiedSearch = async ({
   category = null,
   subcategory = null,
   color = null,
+  brand = null,
   sort = 'popularity',
   page = 1,
   limit = PAGINATION.DEFAULT_LIMIT
@@ -301,7 +320,7 @@ export const unifiedSearch = async ({
   const p = Number.isInteger(Number(page)) && Number(page) > 0 ? Number(page) : 1;
   const l = Math.max(1, Math.min(Number.isInteger(Number(limit)) ? Number(limit) : PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT));
   const offset = (p - 1) * l;
-  const hasExplicitFilters = category || subcategory || color;
+  const hasExplicitFilters = category || subcategory || color || brand;
 
   let filters = {};
   let searchMode = 'explicit';
@@ -315,6 +334,7 @@ export const unifiedSearch = async ({
       category: category || null,
       subcategory: subcategory || null,
       color: color || null,
+      brand: brand || null,
       searchTerm: query
     };
 
@@ -323,6 +343,7 @@ export const unifiedSearch = async ({
       if (!filters.category && smartFilters.category) filters.category = smartFilters.category;
       if (!filters.subcategory && smartFilters.subcategory) filters.subcategory = smartFilters.subcategory;
       if (!filters.color && smartFilters.color) filters.color = smartFilters.color;
+      if (!filters.brand && smartFilters.brand) filters.brand = smartFilters.brand;
     }
     searchMode = 'filtered';
   } else {
@@ -347,6 +368,7 @@ export const unifiedSearch = async ({
     }
 
     if (searchFilters.color) dbQuery = dbQuery.eq('color', searchFilters.color);
+    if (searchFilters.brand) dbQuery = dbQuery.ilike('brand', `%${searchFilters.brand}%`);
 
     // Apply Text Search
     const term = searchFilters.searchTerm;
@@ -360,7 +382,8 @@ export const unifiedSearch = async ({
         } else {
           // Strict: Prefix match (AND logic implied by FTS usually, but let's be explicit or use prefix)
           // Using prefix match for each term: 'term1':* & 'term2':*
-          const formattedQuery = cleanTerm.split(/\s+/).map(w => `'${w}':*`).join(' & ');
+          // ESCAPE SINGLE QUOTES: pond's -> pond''s
+          const formattedQuery = cleanTerm.split(/\s+/).map(w => `'${w.replace(/'/g, "''")}':*`).join(' & ');
           dbQuery = dbQuery.filter('search_vector', 'fts', formattedQuery);
         }
       }
@@ -435,7 +458,7 @@ export const unifiedSearch = async ({
     },
     metadata: {
       query,
-      explicitFilters: { category, subcategory, color },
+      explicitFilters: { category, subcategory, color, brand },
       parsedFilters: searchMode === 'smart' ? filters : null,
       isFuzzyMatch: isFuzzyFallback
     }
@@ -539,6 +562,7 @@ export const getSearchSuggestions = async (partialQuery) => {
   // 3. Fallback: If no dynamic patterns found, use the parsed query construction
   if (suggestions.top_queries.length === 0) {
     const parts = [];
+    if (parsed.brand) parts.push(parsed.brand);
     if (parsed.color) parts.push(parsed.color);
     if (parsed.subcategory) parts.push(parsed.subcategory);
     else if (parsed.category) parts.push(parsed.category);
@@ -598,7 +622,7 @@ export const advancedSearch = async ({
   if (query?.trim()) {
     const cleanTerm = query.replace(/[|&:*!]/g, ' ').trim();
     if (cleanTerm) {
-      const formattedQuery = cleanTerm.split(/\s+/).map(w => `'${w}':*`).join(' & ');
+      const formattedQuery = cleanTerm.split(/\s+/).map(w => `'${w.replace(/'/g, "''")}':*`).join(' & ');
       dbQuery = dbQuery.filter('search_vector', 'fts', formattedQuery);
     }
   }

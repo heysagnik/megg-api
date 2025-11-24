@@ -114,12 +114,12 @@ export const getProductById = async (id) => {
     throw new NotFoundError('Product not found');
   }
 
-  
+
   supabaseAdmin
     .from('products')
     .update({ popularity: (data.popularity || 0) + 1 })
     .eq('id', id)
-    .then(() => {});
+    .then(() => { });
 
   const recommended = await getRecommendedProducts(data.suggested_colors, id);
 
@@ -313,3 +313,40 @@ export const deleteProduct = async (id) => {
   return true;
 };
 
+
+export const getColorVariants = async (id) => {
+  // 1. Fetch the source product to get its metadata
+  const { data: product, error: productError } = await supabaseAdmin
+    .from('products')
+    .select('name, brand, subcategory, category')
+    .eq('id', id)
+    .single();
+
+  if (productError || !product) {
+    throw new NotFoundError('Product not found');
+  }
+
+  // 2. Find other products with same Brand, Subcategory, and Name
+  // We use ilike for name to be case-insensitive
+  let query = supabaseAdmin
+    .from('products')
+    .select('id, name, price, brand, images, color, category, subcategory')
+    .eq('brand', product.brand)
+    .ilike('name', product.name) // Heuristic: Same name = variant
+    .neq('id', id); // Exclude current product
+
+  // Optional: strict subcategory match if it exists
+  if (product.subcategory) {
+    query = query.eq('subcategory', product.subcategory);
+  } else {
+    query = query.eq('category', product.category);
+  }
+
+  const { data, error } = await query.limit(10); // Limit to avoid massive lists
+
+  if (error) {
+    return [];
+  }
+
+  return data;
+};

@@ -11,6 +11,7 @@ import {
 } from '../validators/product.validators.js';
 import { generalLimiter, adminLimiter } from '../middleware/rateLimiter.js';
 import { uploadImages, uploadImagesHandler, normalizeProductUpdateData } from '../middleware/upload.js';
+import { sequentialWrite } from '../middleware/queue.js';
 
 const router = express.Router();
 
@@ -19,11 +20,12 @@ router.get('/browse/:category', generalLimiter, validate(browseCategorySchema), 
 router.get('/:id', generalLimiter, validate(productIdSchema), productController.getProduct);
 router.post('/:id/click', generalLimiter, validate(productIdSchema), productController.trackProductClick);
 router.get('/:id/related', generalLimiter, validate(productIdSchema), productController.getRelatedProducts);
+router.get('/:id/variants', generalLimiter, validate(productIdSchema), productController.getColorVariants);
 
 router.post('/upload-images', authenticate, requireAdmin, adminLimiter, uploadImagesHandler, productController.uploadProductImages);
-router.post('/', authenticate, requireAdmin, adminLimiter, uploadImagesHandler, productController.createProduct);
-router.put('/:id', authenticate, requireAdmin, adminLimiter, uploadImagesHandler, normalizeProductUpdateData, validate(updateProductSchema), productController.updateProduct);
-router.delete('/:id', authenticate, requireAdmin, adminLimiter, validate(productIdSchema), productController.deleteProduct);
+router.post('/', authenticate, requireAdmin, adminLimiter, sequentialWrite, uploadImagesHandler, productController.createProduct);
+router.put('/:id', authenticate, requireAdmin, adminLimiter, sequentialWrite, uploadImagesHandler, normalizeProductUpdateData, validate(updateProductSchema), productController.updateProduct);
+router.delete('/:id', authenticate, requireAdmin, adminLimiter, sequentialWrite, validate(productIdSchema), productController.deleteProduct);
 
 export default router;
 
