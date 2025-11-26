@@ -172,3 +172,17 @@ export const getColorVariants = async (req, res, next) => {
     next(error);
   }
 };
+
+export const getRecommendedFromBrand = async (req, res, next) => {
+  try {
+    const products = await productService.getRecommendedFromBrand(req.params.id);
+
+    res.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+    res.json({
+      success: true,
+      data: products
+    });
+  } catch (error) {
+    next(error);
+  }
+};

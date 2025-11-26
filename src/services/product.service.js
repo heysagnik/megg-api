@@ -350,3 +350,31 @@ export const getColorVariants = async (id) => {
 
   return data;
 };
+
+export const getRecommendedFromBrand = async (id) => {
+  // 1. Fetch the source product to get its brand
+  const { data: product, error: productError } = await supabaseAdmin
+    .from('products')
+    .select('brand')
+    .eq('id', id)
+    .single();
+
+  if (productError || !product) {
+    throw new NotFoundError('Product not found');
+  }
+
+  // 2. Find other products from the same brand
+  const { data, error } = await supabaseAdmin
+    .from('products')
+    .select('id, name, price, brand, images, color, category, subcategory, affiliate_link, popularity')
+    .eq('brand', product.brand)
+    .neq('id', id)
+    .order('popularity', { ascending: false })
+    .limit(12);
+
+  if (error) {
+    return [];
+  }
+
+  return data;
+};
