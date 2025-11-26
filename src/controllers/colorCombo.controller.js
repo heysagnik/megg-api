@@ -93,3 +93,17 @@ export const deleteColorCombo = async (req, res, next) => {
   }
 };
 
+export const getRecommendedColorCombos = async (req, res, next) => {
+  try {
+    const combos = await colorComboService.getRecommendedColorCombos(req.params.id);
+
+    res.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+    res.json({
+      success: true,
+      data: combos
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+

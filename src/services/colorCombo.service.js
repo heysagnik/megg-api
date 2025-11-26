@@ -111,3 +111,37 @@ export const deleteColorCombo = async (id) => {
   return true;
 };
 
+export const getRecommendedColorCombos = async (id) => {
+  // 1. Fetch the source color combo to get its group type
+  const { data: combo, error: comboError } = await supabaseAdmin
+    .from('color_combos')
+    .select('group_type')
+    .eq('id', id)
+    .single();
+
+  if (comboError || !combo) {
+    throw new NotFoundError('Color combo not found');
+  }
+
+  // 2. Find other color combos from the same group type
+  let query = supabaseAdmin
+    .from('color_combos')
+    .select('*')
+    .neq('id', id)
+    .order('name', { ascending: true })
+    .limit(10);
+
+  // Filter by group type if it exists
+  if (combo.group_type) {
+    query = query.eq('group_type', combo.group_type);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    return [];
+  }
+
+  return data;
+};
+

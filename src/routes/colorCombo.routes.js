@@ -16,6 +16,7 @@ const idSchema = z.object({
 
 router.get('/', generalLimiter, colorComboController.listColorCombos);
 router.get('/:id/products', generalLimiter, validate(idSchema), colorComboController.getColorComboProducts);
+router.get('/:id/recommendations', generalLimiter, validate(idSchema), colorComboController.getRecommendedColorCombos);
 
 router.post('/', authenticate, requireAdmin, adminLimiter, uploadModelImageHandler, colorComboController.createColorCombo);
 router.put('/:id', authenticate, requireAdmin, adminLimiter, uploadModelImageHandler, validate(idSchema), colorComboController.updateColorCombo);
