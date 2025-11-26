@@ -351,11 +351,11 @@ export const getColorVariants = async (id) => {
   return data;
 };
 
-export const getRecommendedFromBrand = async (id) => {
-  // 1. Fetch the source product to get its brand
+export const getRecommendedFromSubcategory = async (id) => {
+  // 1. Fetch the source product to get its subcategory
   const { data: product, error: productError } = await supabaseAdmin
     .from('products')
-    .select('brand')
+    .select('subcategory, category')
     .eq('id', id)
     .single();
 
@@ -363,14 +363,22 @@ export const getRecommendedFromBrand = async (id) => {
     throw new NotFoundError('Product not found');
   }
 
-  // 2. Find other products from the same brand
-  const { data, error } = await supabaseAdmin
+  // 2. Find other products from the same subcategory
+  let query = supabaseAdmin
     .from('products')
     .select('id, name, price, brand, images, color, category, subcategory, affiliate_link, popularity')
-    .eq('brand', product.brand)
     .neq('id', id)
     .order('popularity', { ascending: false })
     .limit(12);
+
+  // If subcategory exists, filter by it; otherwise use category
+  if (product.subcategory) {
+    query = query.eq('subcategory', product.subcategory);
+  } else {
+    query = query.eq('category', product.category);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     return [];

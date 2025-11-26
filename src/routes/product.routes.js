@@ -21,7 +21,7 @@ router.get('/:id', generalLimiter, validate(productIdSchema), productController.
 router.post('/:id/click', generalLimiter, validate(productIdSchema), productController.trackProductClick);
 router.get('/:id/related', generalLimiter, validate(productIdSchema), productController.getRelatedProducts);
 router.get('/:id/variants', generalLimiter, validate(productIdSchema), productController.getColorVariants);
-router.get('/:id/brand-recommendations', generalLimiter, validate(productIdSchema), productController.getRecommendedFromBrand);
+router.get('/:id/recommendations', generalLimiter, validate(productIdSchema), productController.getRecommendedFromSubcategory);
 
 router.post('/upload-images', authenticate, requireAdmin, adminLimiter, uploadImagesHandler, productController.uploadProductImages);
 router.post('/', authenticate, requireAdmin, adminLimiter, sequentialWrite, uploadImagesHandler, productController.createProduct);
