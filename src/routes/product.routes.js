@@ -6,6 +6,7 @@ import {
   listProductsSchema,
   browseCategorySchema,
   createProductSchema,
+  createProductWithFilesSchema,
   updateProductSchema,
   productIdSchema
 } from '../validators/product.validators.js';
@@ -24,7 +25,7 @@ router.get('/:id/variants', generalLimiter, validate(productIdSchema), productCo
 router.get('/:id/recommendations', generalLimiter, validate(productIdSchema), productController.getRecommendedFromSubcategory);
 
 router.post('/upload-images', authenticate, requireAdmin, adminLimiter, uploadImagesHandler, productController.uploadProductImages);
-router.post('/', authenticate, requireAdmin, adminLimiter, sequentialWrite, uploadImagesHandler, productController.createProduct);
+router.post('/', authenticate, requireAdmin, adminLimiter, sequentialWrite, uploadImagesHandler, validate(createProductWithFilesSchema), productController.createProduct);
 router.put('/:id', authenticate, requireAdmin, adminLimiter, sequentialWrite, uploadImagesHandler, normalizeProductUpdateData, validate(updateProductSchema), productController.updateProduct);
 router.delete('/:id', authenticate, requireAdmin, adminLimiter, sequentialWrite, validate(productIdSchema), productController.deleteProduct);
 

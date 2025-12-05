@@ -375,21 +375,32 @@ export const unifiedSearch = async ({
     if (searchFilters.color) dbQuery = dbQuery.eq('color', searchFilters.color);
     if (searchFilters.brand) dbQuery = dbQuery.ilike('brand', `%${searchFilters.brand}%`);
 
-    // Apply Text Search
+    // Apply Text Search with improved handling
     const term = searchFilters.searchTerm;
     if (term && term.trim()) {
-      const cleanTerm = term.replace(/[|&:*!]/g, ' ').trim();
+      // Clean and normalize the search term
+      // Remove FTS special characters but preserve apostrophes for words like "POND'S"
+      const cleanTerm = term.replace(/[|&:*!()]/g, ' ').trim();
+      
       if (cleanTerm) {
-        if (isRelaxed) {
-          // Relaxed: OR logic between terms
-          const formattedQuery = cleanTerm.split(/\s+/).map(w => `'${w}'`).join(' | ');
-          dbQuery = dbQuery.textSearch('search_vector', formattedQuery, { config: 'english' });
-        } else {
-          // Strict: Prefix match (AND logic implied by FTS usually, but let's be explicit or use prefix)
-          // Using prefix match for each term: 'term1':* & 'term2':*
-          // ESCAPE SINGLE QUOTES: pond's -> pond''s
-          const formattedQuery = cleanTerm.split(/\s+/).map(w => `'${w.replace(/'/g, "''")}':*`).join(' & ');
-          dbQuery = dbQuery.filter('search_vector', 'fts', formattedQuery);
+        const words = cleanTerm.split(/\s+/).filter(w => w.length > 0);
+        
+        if (words.length > 0) {
+          if (isRelaxed) {
+            // Relaxed: OR logic between terms with prefix matching
+            // This catches partial matches and typos
+            const formattedQuery = words
+              .map(w => `'${w.replace(/'/g, "''")}':*`)
+              .join(' | ');
+            dbQuery = dbQuery.filter('search_vector', 'fts', formattedQuery);
+          } else {
+            // Strict: AND logic with prefix matching for each term
+            // Example: "black hoodie" -> 'black':* & 'hoodie':*
+            const formattedQuery = words
+              .map(w => `'${w.replace(/'/g, "''")}':*`)
+              .join(' & ');
+            dbQuery = dbQuery.filter('search_vector', 'fts', formattedQuery);
+          }
         }
       }
     }
@@ -495,13 +506,18 @@ export const getSearchSuggestions = async (partialQuery) => {
 
   // 2. Fetch relevant products to generate "Predictive Queries" based on actual inventory
   try {
+    // Use proper prefix matching syntax with raw FTS filter
+    // Each word gets prefix matching: 'word':* format
+    const cleanQuery = normalizedQuery.replace(/[|&:*!']/g, ' ').trim();
+    const prefixQuery = cleanQuery.split(/\s+/)
+      .filter(w => w.length > 0)
+      .map(w => `'${w.replace(/'/g, "''")}':*`)
+      .join(' & ');
+    
     const { data: products } = await supabaseAdmin
       .from('products')
       .select('name, brand, category, subcategory, color, popularity')
-      .textSearch('search_vector', `${normalizedQuery}:*`, {
-        config: 'english',
-        type: 'plain'
-      })
+      .filter('search_vector', 'fts', prefixQuery || `'${normalizedQuery}':*`)
       .order('popularity', { ascending: false })
       .limit(20); // Fetch enough to find patterns
 
@@ -625,10 +641,14 @@ export const advancedSearch = async ({
   if (maxPrice) dbQuery = dbQuery.lte('price', maxPrice);
 
   if (query?.trim()) {
-    const cleanTerm = query.replace(/[|&:*!]/g, ' ').trim();
+    // Clean and normalize - preserve apostrophes for brand names like "POND'S"
+    const cleanTerm = query.replace(/[|&:*!()]/g, ' ').trim();
     if (cleanTerm) {
-      const formattedQuery = cleanTerm.split(/\s+/).map(w => `'${w.replace(/'/g, "''")}':*`).join(' & ');
-      dbQuery = dbQuery.filter('search_vector', 'fts', formattedQuery);
+      const words = cleanTerm.split(/\s+/).filter(w => w.length > 0);
+      if (words.length > 0) {
+        const formattedQuery = words.map(w => `'${w.replace(/'/g, "''")}':*`).join(' & ');
+        dbQuery = dbQuery.filter('search_vector', 'fts', formattedQuery);
+      }
     }
   }
 

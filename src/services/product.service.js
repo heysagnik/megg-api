@@ -185,7 +185,21 @@ export const createProduct = async (productData) => {
     .single();
 
   if (error) {
-    throw new Error('Failed to create product');
+    // Log the actual error for debugging
+    console.error('Product creation error:', error);
+    
+    // Provide specific error messages based on error type
+    if (error.code === '23514') {
+      throw new Error(`Invalid category or subcategory value. Please check that '${productData.category}' and '${productData.subcategory}' are valid enum values.`);
+    }
+    if (error.code === '22P02') {
+      throw new Error(`Invalid enum value provided: ${error.message}`);
+    }
+    if (error.code === '23505') {
+      throw new Error('A product with this identifier already exists.');
+    }
+    
+    throw new Error(`Failed to create product: ${error.message}`);
   }
 
   return data;
@@ -240,7 +254,13 @@ export const updateProduct = async (id, updates, newFiles = []) => {
     .single();
 
   if (error) {
-    throw new Error('Failed to update product');
+    console.error('Product update error:', error);
+    
+    if (error.code === '23514' || error.code === '22P02') {
+      throw new Error(`Invalid enum value: ${error.message}`);
+    }
+    
+    throw new Error(`Failed to update product: ${error.message}`);
   }
 
   return data;

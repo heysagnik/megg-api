@@ -26,6 +26,7 @@ export const browseCategorySchema = z.object({
   })
 });
 
+// Schema for API-based product creation (with image URLs)
 export const createProductSchema = z.object({
   body: z.object({
     name: z.string().min(1, 'Name is required'),
@@ -38,6 +39,34 @@ export const createProductSchema = z.object({
     color: z.string().min(1, 'Color is required'),
     suggested_colors: z.array(z.string()).default([]),
     affiliate_link: z.string().url().optional()
+  })
+});
+
+// Schema for multipart/form-data product creation (images uploaded as files)
+// Note: Images come from req.files, not req.body
+export const createProductWithFilesSchema = z.object({
+  body: z.object({
+    name: z.string().min(1, 'Name is required'),
+    description: z.string().optional(),
+    price: z.union([
+      z.number().positive('Price must be positive'),
+      z.string().transform((val) => {
+        const parsed = parseFloat(val);
+        if (isNaN(parsed) || parsed <= 0) throw new Error('Price must be a positive number');
+        return parsed;
+      })
+    ]),
+    brand: z.string().min(1, 'Brand is required'),
+    category: z.enum(PRODUCT_CATEGORIES),
+    subcategory: z.enum(ALL_SUBCATEGORIES).optional(),
+    color: z.string().min(1, 'Color is required'),
+    suggested_colors: z.union([
+      z.array(z.string()),
+      z.string().transform((val) => {
+        try { return JSON.parse(val); } catch { return []; }
+      })
+    ]).default([]),
+    affiliate_link: z.string().url().optional().or(z.literal(''))
   })
 });
 

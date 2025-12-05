@@ -29,25 +29,46 @@ CREATE TYPE product_category AS ENUM (
   'Office wear',
   'Skin care',
   'Traditional',
-  'Perfume'
+  'Perfume',
+  'Innerwear',
+  'Daily Essentials'
 );
 
 CREATE TYPE product_subcategory AS ENUM (
+  -- Jacket
   'Puffer', 'Leather', 'Varsity', 'Bomber', 'Biker', 'Half Jacket', 'Casual Jacket', 'Denim Jacket', 'Wind-cheater',
+  -- Hoodies
   'Zip Hoodie', 'Pullover Hoodie',
+  -- Sweater
   'V Neck Sweater', 'Round Neck Sweater', 'Turtle Neck Sweater', 'Polo Neck Sweater', 'Sweater Vest', 'Cardigan',
+  -- Sweatshirt
   'Oversized Sweatshirt', 'Graphic Sweatshirt', 'Normal Sweatshirt',
+  -- Shirt
   'Check Shirt', 'Striped Shirt', 'Printed Shirt', 'Linen Shirt', 'Textured Shirt', 'Half Shirt', 'Solid Shirt', 'Shacket', 'Formal Shirt', 'Cuban Shirt',
+  -- Jeans
   'Wide Leg Jeans', 'Straight Fit Jeans', 'Cargo Jeans', 'Linen Pants', 'Bootcut Jeans', 'Formal Pants', 'Chinos',
+  -- Trackpants
   'Baggy Trackpants', 'Cargo Trackpants', 'Straight Fit Trackpants',
+  -- Shoes
   'Sneakers', 'Sports Shoes', 'Walking Shoes', 'Clogs', 'Boots', 'Formal Shoes', 'Loafers', 'Canvas Shoes',
+  -- Tshirt
   'Polo Tshirt', 'Oversized Tshirt', 'Full Sleeve Tshirt', 'Gym Tshirt', 'V Neck Tshirt', 'Round Neck Tshirt', 'Printed Tshirt', 'Normal Tshirt',
+  -- Mens Accessories
   'Bags', 'Caps', 'Watches', 'Tie', 'Belt', 'Sunglasses', 'Rings', 'Lockets',
+  -- Sports
   'Sports Shorts', 'Sports Jacket', 'Socks', 'Sports Shoes General', 'Football Shoes', 'Badminton Shoes', 'Gym Tee',
+  -- Office wear
   'Formal Pants Office', 'Formal Shirts Office', 'Suits', 'Tuxedo', 'Formal Shoes Office', 'Loafers Office', 'Blazers', 'Ties & Pocket Squares',
+  -- Skin care
   'Face Wash', 'Moisturiser', 'Cleanser', 'Sunscreen', 'Serum',
+  -- Traditional
   'Kurta', 'Koti', 'Pyjama', 'Short Kurta', 'Blazer Traditional', 'Kurta Set', 'Indo-western',
-  'EDT', 'EDC', 'EDP'
+  -- Perfume
+  'EDT', 'EDC', 'EDP',
+  -- Innerwear
+  'Trunks', 'Boxers', 'Vests', 'Briefs', 'Thermal Top', 'Thermal Bottom', 'Thermal Set',
+  -- Daily Essentials
+  'Storage & Organizers', 'Travel Essentials', 'Grooming Tools', 'Electronics', 'Cleaning & Care', 'Everyday Carry', 'Home Essentials'
 );
 
 CREATE TYPE combo_group AS ENUM ('summer', 'winter', 'casual', 'formal');
