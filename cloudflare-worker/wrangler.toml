@@ -1,0 +1,26 @@
+name = "megg-api-edge-cache"
+main = "src/index.js"
+compatibility_date = "2024-01-01"
+
+# Account ID - You'll need to add this after creating your Cloudflare account
+# account_id = "your-account-id-here"
+
+# Custom domain routing (optional - configure after deployment)
+# routes = [
+#   { pattern = "api.yourdomain.com/*", zone_name = "yourdomain.com" }
+# ]
+
+[vars]
+# Your Vercel API origin URL
+ORIGIN_URL = "https://your-vercel-app.vercel.app"
+
+# Cache settings
+DEFAULT_CACHE_TTL = "300"  # 5 minutes in seconds
+MAX_CACHE_TTL = "3600"     # 1 hour max
+
+# Environment-specific overrides
+[env.production]
+name = "megg-api-edge-cache"
+
+[env.staging]
+name = "megg-api-edge-cache-staging"

@@ -4,6 +4,7 @@ export const listAllReels = async (req, res, next) => {
   try {
     const reels = await reelService.listAllReels();
 
+    res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     res.json({
       success: true,
       data: reels
@@ -17,6 +18,7 @@ export const listReelsByCategory = async (req, res, next) => {
   try {
     const reels = await reelService.listReelsByCategory(req.params.category);
 
+    res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     res.json({
       success: true,
       data: reels
@@ -30,6 +32,7 @@ export const getReelWithProducts = async (req, res, next) => {
   try {
     const reel = await reelService.getReelWithProducts(req.params.id);
 
+    res.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
     res.json({
       success: true,
       data: reel

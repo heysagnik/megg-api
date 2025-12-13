@@ -32,7 +32,7 @@ export const listReelsByCategory = async (category) => {
 export const getReelWithProducts = async (id) => {
   const { data: reel, error } = await supabaseAdmin
     .from('reels')
-    .select('*')
+    .select('id, category, video_url, thumbnail_url, affiliate_link, product_ids, views, likes, created_at')
     .eq('id', id)
     .single();
 

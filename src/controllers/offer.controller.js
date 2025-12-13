@@ -6,6 +6,7 @@ export const listOffers = async (req, res, next) => {
   try {
     const result = await offerService.listOffers(req.query);
 
+    res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     res.json({
       success: true,
       data: result
@@ -19,6 +20,7 @@ export const getOffer = async (req, res, next) => {
   try {
     const offer = await offerService.getOfferById(req.params.id);
 
+    res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     res.json({
       success: true,
       data: offer

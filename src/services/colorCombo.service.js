@@ -1,29 +1,34 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { NotFoundError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
+import { getCached, invalidateCacheByPrefix, CACHE_TTL } from '../utils/cache.js';
 
 export const listColorCombos = async (groupType = null) => {
-  let query = supabaseAdmin
-    .from('color_combos')
-    .select('*');
+  const cacheKey = `color_combos:${groupType || 'all'}`;
 
-  if (groupType) {
-    query = query.eq('group_type', groupType);
-  }
+  return getCached(cacheKey, CACHE_TTL.COLOR_COMBOS, async () => {
+    let query = supabaseAdmin
+      .from('color_combos')
+      .select('id, name, model_image, product_ids, color_a, color_b, group_type, created_at');
 
-  const { data, error } = await query.order('name', { ascending: true });
+    if (groupType) {
+      query = query.eq('group_type', groupType);
+    }
 
-  if (error) {
-    throw new Error('Failed to fetch color combos');
-  }
+    const { data, error } = await query.order('name', { ascending: true });
 
-  return data;
+    if (error) {
+      throw new Error('Failed to fetch color combos');
+    }
+
+    return data;
+  });
 };
 
 export const getColorComboProducts = async (id) => {
   const { data: combo, error: comboError } = await supabaseAdmin
     .from('color_combos')
-    .select('*')
+    .select('id, name, model_image, product_ids, color_a, color_b, group_type, created_at')
     .eq('id', id)
     .single();
 
@@ -54,6 +59,9 @@ export const createColorCombo = async (comboData) => {
     throw new Error('Failed to create color combo');
   }
 
+  // Invalidate cache on create
+  await invalidateCacheByPrefix('color_combos:');
+
   return data;
 };
 
@@ -80,6 +88,9 @@ export const updateColorCombo = async (id, updates) => {
   if (error) {
     throw new Error('Failed to update color combo');
   }
+
+  // Invalidate cache on update
+  await invalidateCacheByPrefix('color_combos:');
 
   return data;
 };
@@ -108,6 +119,9 @@ export const deleteColorCombo = async (id) => {
     throw new Error('Failed to delete color combo');
   }
 
+  // Invalidate cache on delete
+  await invalidateCacheByPrefix('color_combos:');
+
   return true;
 };
 
@@ -126,7 +140,7 @@ export const getRecommendedColorCombos = async (id) => {
   // 2. Find other color combos from the same group type
   let query = supabaseAdmin
     .from('color_combos')
-    .select('*')
+    .select('id, name, model_image, product_ids, color_a, color_b, group_type')
     .neq('id', id)
     .order('name', { ascending: true })
     .limit(10);

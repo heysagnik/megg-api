@@ -107,7 +107,7 @@ export const browseByCategory = async ({ category, subcategory, color, sort = 'p
 export const getProductById = async (id) => {
   const { data, error } = await supabaseAdmin
     .from('products')
-    .select('*')
+    .select('id, name, description, price, brand, images, category, subcategory, color, fabric, affiliate_link, is_active, clicks, popularity, created_at, updated_at')
     .eq('id', id)
     .single();
 

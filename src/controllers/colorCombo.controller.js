@@ -7,6 +7,7 @@ export const listColorCombos = async (req, res, next) => {
     const { group } = req.query;
     const combos = await colorComboService.listColorCombos(group || null);
 
+    res.set('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=3600');
     res.json({
       success: true,
       data: combos
@@ -20,6 +21,7 @@ export const getColorComboProducts = async (req, res, next) => {
   try {
     const result = await colorComboService.getColorComboProducts(req.params.id);
 
+    res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     res.json({
       success: true,
       data: result

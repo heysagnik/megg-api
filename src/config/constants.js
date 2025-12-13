@@ -86,7 +86,7 @@ export const VIDEO_CATEGORIES = [
 ];
 
 export const PAGINATION = {
-  DEFAULT_LIMIT: 20,
+  DEFAULT_LIMIT: 12,
   MAX_LIMIT: 100
 };
 
