@@ -6,7 +6,6 @@ export const createReelSchema = z.object({
     category: z.enum(VIDEO_CATEGORIES, { errorMap: () => ({ message: 'Invalid category' }) }),
     video_url: z.string().url('Video URL must be valid'),
     thumbnail_url: z.string().url('Thumbnail URL must be valid'),
-    affiliate_link: z.string().url('Affiliate link must be valid'),
     product_ids: z.array(z.string().uuid()).default([])
   })
 });
@@ -19,7 +18,6 @@ export const updateReelSchema = z.object({
     category: z.enum(VIDEO_CATEGORIES).optional(),
     video_url: z.string().url().optional(),
     thumbnail_url: z.string().url().optional(),
-    affiliate_link: z.string().url().optional(),
     product_ids: z.array(z.string().uuid()).optional()
   })
 });

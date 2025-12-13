@@ -26,13 +26,22 @@ winston.addColors(colors);
 
 const format = winston.format.combine(
     winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss:ms' }),
+    winston.format.errors({ stack: true }),
     // Use JSON in production, colored text in development
     (process.env.NODE_ENV === 'development')
         ? winston.format.combine(
             winston.format.colorize({ all: true }),
-            winston.format.printf(
-                (info) => `${info.timestamp} ${info.level}: ${info.message}`,
-            )
+            winston.format.printf((info) => {
+                const { timestamp, level, message, ...meta } = info;
+                let log = `${timestamp} ${level}: ${message}`;
+                
+                // Add metadata if present
+                if (Object.keys(meta).length > 0) {
+                    log += `\n  Metadata: ${JSON.stringify(meta, null, 2)}`;
+                }
+                
+                return log;
+            })
         )
         : winston.format.json()
 );

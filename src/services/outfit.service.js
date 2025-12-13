@@ -4,7 +4,7 @@ import { NotFoundError } from '../utils/errors.js';
 export const listOutfits = async () => {
   const { data, error } = await supabaseAdmin
     .from('outfits')
-    .select('id, title, banner_image, affiliate_link, product_ids, created_at')
+    .select('id, title, banner_image, product_ids, created_at')
     .order('created_at', { ascending: false })
     .limit(4);
 

@@ -37,7 +37,7 @@ export const listProducts = async (req, res, next) => {
       result = await productService.listProducts(req.query);
     }
 
-    res.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+    res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
     res.json({
       success: true,
       data: result
@@ -54,7 +54,7 @@ export const browseByCategory = async (req, res, next) => {
       ...req.query
     });
 
-    res.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+    res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
     res.json({
       success: true,
       data: result
@@ -68,7 +68,7 @@ export const getProduct = async (req, res, next) => {
   try {
     const result = await productService.getProductById(req.params.id);
 
-    res.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+    res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
     res.json({
       success: true,
       data: result
@@ -82,7 +82,7 @@ export const getRelatedProducts = async (req, res, next) => {
   try {
     const products = await productService.getRelatedProducts(req.params.id);
 
-    res.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+    res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
     res.json({
       success: true,
       data: products
@@ -163,7 +163,7 @@ export const getColorVariants = async (req, res, next) => {
   try {
     const variants = await productService.getColorVariants(req.params.id);
 
-    res.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+    res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
     res.json({
       success: true,
       data: variants
@@ -177,7 +177,7 @@ export const getRecommendedFromSubcategory = async (req, res, next) => {
   try {
     const products = await productService.getRecommendedFromSubcategory(req.params.id);
 
-    res.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+    res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
     res.json({
       success: true,
       data: products

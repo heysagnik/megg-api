@@ -129,7 +129,6 @@ CREATE TABLE outfits (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   title TEXT NOT NULL,
   banner_image TEXT NOT NULL,
-  affiliate_link TEXT NOT NULL,
   product_ids UUID[] DEFAULT '{}',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -170,7 +169,6 @@ CREATE TABLE reels (
   category video_category NOT NULL,
   video_url TEXT NOT NULL,
   thumbnail_url TEXT NOT NULL,
-  affiliate_link TEXT NOT NULL,
   product_ids UUID[] DEFAULT '{}',
   views INTEGER DEFAULT 0,
   likes INTEGER DEFAULT 0,

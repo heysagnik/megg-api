@@ -1,12 +1,13 @@
 const CACHE_CONFIG = {
-    '/api/color-combos': { ttl: 1800, staleWhileRevalidate: 3600 },
-    '/api/categories': { ttl: 3600, staleWhileRevalidate: 7200 },
-    '/api/offers': { ttl: 300, staleWhileRevalidate: 600 },
-    '/api/reels': { ttl: 300, staleWhileRevalidate: 600 },
-    '/api/products': { ttl: 60, staleWhileRevalidate: 300 },
+    '/api/color-combos': { ttl: 900, staleWhileRevalidate: 1800 },
+    '/api/categories': { ttl: 900, staleWhileRevalidate: 1800 },
+    '/api/offers': { ttl: 900, staleWhileRevalidate: 1800 },
+    '/api/reels': { ttl: 900, staleWhileRevalidate: 1800 },
+    '/api/products': { ttl: 900, staleWhileRevalidate: 1800 },
     '/api/trending': { ttl: 300, staleWhileRevalidate: 600 },
-    '/api/search': { ttl: 60, staleWhileRevalidate: 300 },
-    default: { ttl: 60, staleWhileRevalidate: 120 }
+    '/api/search': { ttl: 900, staleWhileRevalidate: 1800 },
+    '/api/banners': { ttl: 900, staleWhileRevalidate: 1800 },
+    default: { ttl: 900, staleWhileRevalidate: 1800 }
 };
 
 const NO_CACHE_ROUTES = ['/api/auth', '/api/admin', '/api/wishlist', '/api/upload', '/api/health'];
@@ -92,7 +93,7 @@ function getCacheConfig(pathname) {
 }
 
 async function fetchFromOrigin(request, env) {
-    const originUrl = env.ORIGIN_URL || 'https://your-vercel-app.vercel.app';
+    const originUrl = env.ORIGIN_URL || 'https://megg-api.vercel.app';
     const url = new URL(request.url);
     const targetUrl = `${originUrl}${url.pathname}${url.search}`;
 
@@ -127,7 +128,7 @@ async function handleCachePurge(request, env) {
         const purged = [];
 
         for (const path of paths) {
-            const key = new Request(`${env.ORIGIN_URL || 'https://your-app.vercel.app'}${path}`);
+            const key = new Request(`${env.ORIGIN_URL || 'https://megg-api.vercel.app'}${path}`);
             await cache.delete(key);
             purged.push(path);
         }

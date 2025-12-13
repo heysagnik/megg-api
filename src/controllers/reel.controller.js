@@ -4,7 +4,7 @@ export const listAllReels = async (req, res, next) => {
   try {
     const reels = await reelService.listAllReels();
 
-    res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+    res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
     res.json({
       success: true,
       data: reels
@@ -18,7 +18,7 @@ export const listReelsByCategory = async (req, res, next) => {
   try {
     const reels = await reelService.listReelsByCategory(req.params.category);
 
-    res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+    res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
     res.json({
       success: true,
       data: reels
@@ -32,7 +32,7 @@ export const getReelWithProducts = async (req, res, next) => {
   try {
     const reel = await reelService.getReelWithProducts(req.params.id);
 
-    res.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300');
+    res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
     res.json({
       success: true,
       data: reel
@@ -57,6 +57,12 @@ export const createReel = async (req, res, next) => {
 
 export const updateReel = async (req, res, next) => {
   try {
+    console.log('Update reel request:', {
+      id: req.params.id,
+      body: req.body,
+      bodyKeys: Object.keys(req.body)
+    });
+    
     const reel = await reelService.updateReel(req.params.id, req.body);
 
     res.json({
@@ -64,6 +70,7 @@ export const updateReel = async (req, res, next) => {
       data: reel
     });
   } catch (error) {
+    console.error('Update reel error:', error);
     next(error);
   }
 };
