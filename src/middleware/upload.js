@@ -155,10 +155,10 @@ export const normalizeProductUpdateData = (req, res, next) => {
       req.body.price = parseFloat(req.body.price);
     }
 
-    // Handle suggested_colors parsing
-    if (req.body.suggested_colors && typeof req.body.suggested_colors === 'string') {
+    // Handle fabric parsing
+    if (req.body.fabric && typeof req.body.fabric === 'string') {
       try {
-        req.body.suggested_colors = JSON.parse(req.body.suggested_colors);
+        req.body.fabric = JSON.parse(req.body.fabric);
       } catch (e) {
         // ignore
       }

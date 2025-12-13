@@ -68,7 +68,7 @@ CREATE TYPE product_subcategory AS ENUM (
   'Trunks', 'Vests', 'Boxers', 'Thermal Wear'
 );
 
-CREATE TYPE combo_group AS ENUM ('summer', 'winter', 'casual', 'formal');
+CREATE TYPE combo_group AS ENUM ('layering', 'winter', 'casual', 'formal');
 
 CREATE TYPE video_category AS ENUM (
   'Office',
@@ -108,7 +108,7 @@ CREATE TABLE products (
   category product_category NOT NULL,
   subcategory product_subcategory,
   color TEXT NOT NULL,
-  suggested_colors TEXT[] DEFAULT '{}',
+  fabric TEXT[] DEFAULT '{}',
   affiliate_link TEXT,
   is_active BOOLEAN DEFAULT TRUE,
   clicks INTEGER DEFAULT 0,
@@ -124,12 +124,13 @@ CREATE TABLE products (
   ) STORED
 );
 
--- Outfits table (simplified)
+-- Outfits table
 CREATE TABLE outfits (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   title TEXT NOT NULL,
   banner_image TEXT NOT NULL,
   affiliate_link TEXT NOT NULL,
+  product_ids UUID[] DEFAULT '{}',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -263,6 +264,7 @@ CREATE INDEX idx_products_category_color ON products(category, color);
 
 -- Outfits indexes
 CREATE INDEX idx_outfits_created_at ON outfits(created_at);
+CREATE INDEX idx_outfits_product_ids ON outfits USING GIN(product_ids);
 
 -- Color combos indexes
 CREATE INDEX idx_color_combos_group_type ON color_combos(group_type);

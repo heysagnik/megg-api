@@ -48,10 +48,10 @@ export const STYLE_KEYWORDS = {
     description: 'Winter wear',
     keywords: ['winter', 'cold', 'warm', 'cozy']
   },
-  summer: {
-    categories: ['Tshirt', 'Trackpants', 'Shoes', 'Mens Accessories'],
-    description: 'Summer wear',
-    keywords: ['summer', 'light', 'breathable', 'cool']
+  layering: {
+    categories: ['Jacket', 'Hoodies', 'Sweatshirt', 'Shirt'],
+    description: 'Layering outfits',
+    keywords: ['layering', 'layers', 'versatile', 'stylish', 'multiple']
   },
   traditional: {
     categories: ['Traditional', 'Shirt', 'Shoes', 'Mens Accessories'],

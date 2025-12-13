@@ -100,8 +100,8 @@ export const createProduct = async (req, res, next) => {
       productData.price = parseFloat(productData.price);
     }
 
-    if (productData.suggested_colors && typeof productData.suggested_colors === 'string') {
-      productData.suggested_colors = JSON.parse(productData.suggested_colors);
+    if (productData.fabric && typeof productData.fabric === 'string') {
+      productData.fabric = JSON.parse(productData.fabric);
     }
 
     if (req.files && req.files.length > 0) {

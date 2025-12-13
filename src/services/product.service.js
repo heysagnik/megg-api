@@ -123,7 +123,7 @@ export const getProductById = async (id) => {
     .then(() => { })
     .catch(err => logger.error(`Failed to update popularity for product ${id}: ${err.message}`));
 
-  const recommended = await getRecommendedProducts(data.suggested_colors, id);
+  const recommended = await getRecommendedProducts(data.fabric, id);
 
   return { product: data, recommended };
 };
@@ -133,8 +133,8 @@ export const incrementProductClicks = async (id) => {
   await supabaseAdmin.rpc('increment_product_clicks', { product_id: id });
 };
 
-export const getRecommendedProducts = async (suggestedColors, excludeId) => {
-  if (!suggestedColors || suggestedColors.length === 0) {
+export const getRecommendedProducts = async (fabricTypes, excludeId) => {
+  if (!fabricTypes || fabricTypes.length === 0) {
     return [];
   }
 
@@ -142,7 +142,7 @@ export const getRecommendedProducts = async (suggestedColors, excludeId) => {
     .from('products')
     .select('id, name, price, brand, images, color, category, subcategory')
     .neq('id', excludeId)
-    .in('color', suggestedColors)
+    .in('color', fabricTypes)
     .limit(6);
 
   if (error) {

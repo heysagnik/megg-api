@@ -37,7 +37,7 @@ export const createProductSchema = z.object({
     category: z.enum(PRODUCT_CATEGORIES),
     subcategory: z.enum(ALL_SUBCATEGORIES).optional(),
     color: z.string().min(1, 'Color is required'),
-    suggested_colors: z.array(z.string()).default([]),
+    fabric: z.array(z.string()).default([]),
     affiliate_link: z.string().url().optional()
   })
 });
@@ -60,7 +60,7 @@ export const createProductWithFilesSchema = z.object({
     category: z.enum(PRODUCT_CATEGORIES),
     subcategory: z.enum(ALL_SUBCATEGORIES).optional(),
     color: z.string().min(1, 'Color is required'),
-    suggested_colors: z.union([
+    fabric: z.union([
       z.array(z.string()),
       z.string().transform((val) => {
         try { return JSON.parse(val); } catch { return []; }
@@ -83,7 +83,7 @@ export const updateProductSchema = z.object({
     category: z.enum(PRODUCT_CATEGORIES).optional(),
     subcategory: z.enum(ALL_SUBCATEGORIES).optional(),
     color: z.string().optional(),
-    suggested_colors: z.array(z.string()).optional(),
+    fabric: z.array(z.string()).optional(),
     affiliate_link: z.string().url().optional()
   })
 });
