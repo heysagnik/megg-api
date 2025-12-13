@@ -1,6 +1,6 @@
 -- Fashion Discovery App Database Schema for Supabase
 -- Complete production schema matching actual database structure
--- Last updated: 2025-11-12
+-- Last updated: 2025-12-13
 -- Run this script in Supabase SQL Editor
 
 -- =============================================================================
@@ -25,66 +25,63 @@ CREATE TYPE product_category AS ENUM (
   'Shoes',
   'Tshirt',
   'Mens Accessories',
-  'Sports',
-  'Office wear',
-  'Skin care',
+  'Sports Wear',
+  'Office Wear',
+  'Body Care',
   'Traditional',
   'Perfume',
-  'Innerwear',
-  'Daily Essentials'
+  'Innerwear'
 );
 
 CREATE TYPE product_subcategory AS ENUM (
   -- Jacket
-  'Puffer', 'Leather', 'Varsity', 'Bomber', 'Biker', 'Half Jacket', 'Casual Jacket', 'Denim Jacket', 'Wind-cheater',
+  'Puffer Jacket', 'Leather Jacket', 'Varsity Jacket', 'Bomber Jacket', 'Biker Jacket', 'Denim Jacket', 'Windcheater', 'Suede Jacket', 'Half Jacket', 'Overcoat',
   -- Hoodies
-  'Zip Hoodie', 'Pullover Hoodie',
+  'Regular Hoodie', 'Zip Hoodie', 'Printed Hoodie',
   -- Sweater
-  'V Neck Sweater', 'Round Neck Sweater', 'Turtle Neck Sweater', 'Polo Neck Sweater', 'Sweater Vest', 'Cardigan',
+  'Round Neck Sweater', 'V-Neck Sweater', 'Turtleneck Sweater', 'Polo Neck Sweater', 'Sweater Vest', 'Cardigan', 'Zip Sweater',
   -- Sweatshirt
-  'Oversized Sweatshirt', 'Graphic Sweatshirt', 'Normal Sweatshirt',
+  'Oversized Sweatshirt', 'Printed Sweatshirt', 'Pullover Sweatshirt', 'Zip Sweatshirt',
   -- Shirt
-  'Check Shirt', 'Striped Shirt', 'Printed Shirt', 'Linen Shirt', 'Textured Shirt', 'Half Shirt', 'Solid Shirt', 'Shacket', 'Formal Shirt', 'Cuban Shirt',
+  'Checked Shirt', 'Striped Shirt', 'Printed Shirt', 'Linen Shirt', 'Textured Shirt', 'Half-Sleeve Shirt', 'Solid Shirt', 'Shacket',
   -- Jeans
-  'Wide Leg Jeans', 'Straight Fit Jeans', 'Cargo Jeans', 'Linen Pants', 'Bootcut Jeans', 'Formal Pants', 'Chinos',
+  'Wide-Leg Jeans', 'Straight Fit Jeans', 'Cargo Pants', 'Bootcut Jeans', 'Chinos', 'Linen Pants',
   -- Trackpants
-  'Baggy Trackpants', 'Cargo Trackpants', 'Straight Fit Trackpants',
+  'Baggy Trackpants', 'Cargo Trackpants',
   -- Shoes
-  'Sneakers', 'Sports Shoes', 'Walking Shoes', 'Clogs', 'Boots', 'Formal Shoes', 'Loafers', 'Canvas Shoes',
+  'Sneakers', 'Clogs', 'Boots', 'Loafers', 'Canvas Shoes',
   -- Tshirt
-  'Polo Tshirt', 'Oversized Tshirt', 'Full Sleeve Tshirt', 'Gym Tshirt', 'V Neck Tshirt', 'Round Neck Tshirt', 'Printed Tshirt', 'Normal Tshirt',
+  'Regular Fit T-Shirt', 'Oversized T-Shirt', 'Polo T-Shirt', 'Full-Sleeve T-Shirt', 'Gym T-Shirt',
   -- Mens Accessories
-  'Bags', 'Caps', 'Watches', 'Tie', 'Belt', 'Sunglasses', 'Rings', 'Lockets',
-  -- Sports
-  'Sports Shorts', 'Sports Jacket', 'Socks', 'Sports Shoes General', 'Football Shoes', 'Badminton Shoes', 'Gym Tee',
-  -- Office wear
-  'Formal Pants Office', 'Formal Shirts Office', 'Suits', 'Tuxedo', 'Formal Shoes Office', 'Loafers Office', 'Blazers', 'Ties & Pocket Squares',
-  -- Skin care
-  'Face Wash', 'Moisturiser', 'Cleanser', 'Sunscreen', 'Serum',
+  'Bags', 'Caps', 'Watches', 'Belts', 'Sunglasses', 'Rings', 'Chains',
+  -- Sports Wear
+  'Shorts', 'Sports Jacket', 'Socks', 'Football Shoes', 'Badminton Shoes', 'Sports Shoes',
+  -- Office Wear
+  'Formal Shirts', 'Formal Pants', 'Formal Shoes', 'Suits', 'Tuxedo', 'Blazers', 'Ties & Pocket Squares',
+  -- Body Care
+  'Face Wash', 'Moisturiser', 'Sunscreen', 'Serum', 'Underarm Roll-On', 'Shampoo', 'Body Wash', 'Hair Oil',
   -- Traditional
-  'Kurta', 'Koti', 'Pyjama', 'Short Kurta', 'Blazer Traditional', 'Kurta Set', 'Indo-western',
+  'Kurta', 'Pyjama', 'Short Kurta', 'Kurta Set', 'Indo-Western Outfit', 'Nehru Jacket', 'Ethnic Shoes',
   -- Perfume
-  'EDT', 'EDC', 'EDP',
+  'Luxurious', 'Budget-Friendly',
   -- Innerwear
-  'Trunks', 'Boxers', 'Vests', 'Briefs', 'Thermal Top', 'Thermal Bottom', 'Thermal Set',
-  -- Daily Essentials
-  'Storage & Organizers', 'Travel Essentials', 'Grooming Tools', 'Electronics', 'Cleaning & Care', 'Everyday Carry', 'Home Essentials'
+  'Trunks', 'Vests', 'Boxers', 'Thermal Wear'
 );
 
 CREATE TYPE combo_group AS ENUM ('summer', 'winter', 'casual', 'formal');
 
 CREATE TYPE video_category AS ENUM (
-  'Office fit',
-  'Layering outfit',
-  'Winter fit',
-  'Festive fit',
-  'Travel fit',
+  'Office',
+  'Date',
+  'College',
+  'Party',
+  'Color-combo',
   'Personality development',
-  'Date fit',
-  'Colour combo',
-  'College fit',
-  'Party fit',
-  'Airport look'
+  'Old money',
+  'Streetwear',
+  'Wedding',
+  'Winter',
+  'Layering'
 );
 
 -- =============================================================================
@@ -140,13 +137,13 @@ CREATE TABLE outfits (
 CREATE TABLE color_combos (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name TEXT NOT NULL,
-  primary_color TEXT NOT NULL,
-  combo_colors TEXT[] NOT NULL DEFAULT '{}',
-  group_type combo_group NOT NULL,
   model_image TEXT,
   product_ids UUID[] NOT NULL DEFAULT '{}',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  color_a TEXT,
+  color_b TEXT,
+  group_type combo_group
 );
 
 -- Trending clicks table
@@ -202,12 +199,9 @@ CREATE TABLE category_banners (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   category product_category NOT NULL,
   banner_image TEXT NOT NULL,
-  advertisement_link TEXT NOT NULL,
-  title TEXT,
-  is_active BOOLEAN DEFAULT TRUE,
+  link TEXT NOT NULL,
   display_order INTEGER DEFAULT 0,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Notifications table
@@ -215,10 +209,38 @@ CREATE TABLE notifications (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   title TEXT NOT NULL,
   description TEXT NOT NULL,
-  image TEXT,
   link TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  image TEXT
 );
+
+-- FCM Tokens table (for push notifications)
+CREATE TABLE fcm_tokens (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+  token TEXT NOT NULL,
+  platform TEXT NOT NULL CHECK (platform IN ('android', 'ios', 'web')),
+  device_info JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Gemini API Usage table (for tracking API usage and rate limiting)
+CREATE TABLE gemini_api_usage (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  api_key_hash VARCHAR NOT NULL UNIQUE,
+  usage_count INTEGER NOT NULL DEFAULT 0,
+  last_reset TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  is_valid BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE gemini_api_usage IS 'Tracks Gemini API key usage for rate limiting (250 RPD per key)';
+COMMENT ON COLUMN gemini_api_usage.api_key_hash IS 'SHA256 hash prefix of the API key (first 16 chars)';
+COMMENT ON COLUMN gemini_api_usage.usage_count IS 'Number of API calls made since last_reset';
+COMMENT ON COLUMN gemini_api_usage.last_reset IS 'When the usage count was last reset (resets every 24h)';
+COMMENT ON COLUMN gemini_api_usage.is_valid IS 'Whether the API key is still valid (false if permanently failed)';
 
 -- =============================================================================
 -- INDEXES
@@ -252,7 +274,6 @@ CREATE INDEX idx_trending_clicks_clicked_at ON trending_clicks(clicked_at);
 
 -- Category banners indexes
 CREATE INDEX idx_category_banners_category ON category_banners(category);
-CREATE INDEX idx_category_banners_is_active ON category_banners(is_active);
 CREATE INDEX idx_category_banners_display_order ON category_banners(display_order);
 
 -- Reels indexes
@@ -502,9 +523,6 @@ CREATE POLICY "Users can remove from own wishlist" ON wishlist
   FOR DELETE USING (auth.uid() = user_id);
 
 -- Category banners policies
-CREATE POLICY "Anyone can view active banners" ON category_banners
-  FOR SELECT USING (is_active = true OR auth.uid() IS NOT NULL);
-
 CREATE POLICY "Service role can manage banners" ON category_banners
   FOR ALL USING (auth.jwt()->>'role' = 'service_role');
 

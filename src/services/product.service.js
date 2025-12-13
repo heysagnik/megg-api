@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { NotFoundError } from '../utils/errors.js';
 import { PAGINATION } from '../config/constants.js';
+import logger from '../utils/logger.js';
 
 const applySorting = (query, sort) => {
   switch (sort) {
@@ -119,7 +120,8 @@ export const getProductById = async (id) => {
     .from('products')
     .update({ popularity: (data.popularity || 0) + 1 })
     .eq('id', id)
-    .then(() => { });
+    .then(() => { })
+    .catch(err => logger.error(`Failed to update popularity for product ${id}: ${err.message}`));
 
   const recommended = await getRecommendedProducts(data.suggested_colors, id);
 
@@ -185,10 +187,8 @@ export const createProduct = async (productData) => {
     .single();
 
   if (error) {
-    // Log the actual error for debugging
-    console.error('Product creation error:', error);
-    
-    // Provide specific error messages based on error type
+    logger.error('Product creation error:', error);
+
     if (error.code === '23514') {
       throw new Error(`Invalid category or subcategory value. Please check that '${productData.category}' and '${productData.subcategory}' are valid enum values.`);
     }
@@ -198,7 +198,7 @@ export const createProduct = async (productData) => {
     if (error.code === '23505') {
       throw new Error('A product with this identifier already exists.');
     }
-    
+
     throw new Error(`Failed to create product: ${error.message}`);
   }
 
@@ -206,7 +206,6 @@ export const createProduct = async (productData) => {
 };
 
 export const updateProduct = async (id, updates, newFiles = []) => {
-  // Get existing product to check current images
   const { data: existingProduct, error: fetchError } = await supabaseAdmin
     .from('products')
     .select('*')
@@ -217,17 +216,13 @@ export const updateProduct = async (id, updates, newFiles = []) => {
     throw new NotFoundError('Product not found');
   }
 
-  // Handle Image Synchronization
-  // We sync if images are explicitly provided (kept images) or new files are uploaded
   if (updates.images !== undefined || newFiles.length > 0) {
     const currentImages = existingProduct.images || [];
     let keptImages = updates.images || [];
 
-    // Ensure keptImages is array and filter valid strings
     if (!Array.isArray(keptImages)) keptImages = [keptImages];
     keptImages = keptImages.filter(url => typeof url === 'string' && url.trim().length > 0);
 
-    // Identify images to delete (present in current but not in kept)
     const imagesToDelete = currentImages.filter(img => !keptImages.includes(img));
 
     if (imagesToDelete.length > 0) {
@@ -235,14 +230,12 @@ export const updateProduct = async (id, updates, newFiles = []) => {
       await deleteMultipleProductImages(imagesToDelete);
     }
 
-    // Upload new files
     let newImageUrls = [];
     if (newFiles.length > 0) {
       const { uploadMultipleProductImages } = await import('./upload.service.js');
       newImageUrls = await uploadMultipleProductImages(newFiles);
     }
 
-    // Merge kept images and new images
     updates.images = [...keptImages, ...newImageUrls];
   }
 
@@ -254,12 +247,12 @@ export const updateProduct = async (id, updates, newFiles = []) => {
     .single();
 
   if (error) {
-    console.error('Product update error:', error);
-    
+    logger.error('Product update error:', error);
+
     if (error.code === '23514' || error.code === '22P02') {
       throw new Error(`Invalid enum value: ${error.message}`);
     }
-    
+
     throw new Error(`Failed to update product: ${error.message}`);
   }
 
@@ -267,7 +260,6 @@ export const updateProduct = async (id, updates, newFiles = []) => {
 };
 
 export const deleteProduct = async (id) => {
-  // Fetch product directly  avoid side effects (like incrementing clicks)
   const { data: product, error: fetchError } = await supabaseAdmin
     .from('products')
     .select('*')

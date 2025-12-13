@@ -1,4 +1,4 @@
-import { supabase, supabaseAdmin } from '../config/supabase.js';
+import { supabase } from '../config/supabase.js';
 import { UnauthorizedError, ForbiddenError } from '../utils/errors.js';
 
 export const authenticate = async (req, res, next) => {
@@ -31,7 +31,7 @@ export const optionalAuth = async (req, res, next) => {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.substring(7);
       const { data: { user } } = await supabase.auth.getUser(token);
-      
+
       if (user) {
         req.user = user;
       }

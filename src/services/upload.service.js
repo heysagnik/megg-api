@@ -64,7 +64,7 @@ const getPublicIdFromUrl = (url) => {
   }
 };
 
-export const uploadProductImage = async (fileBuffer, fileName, mimeType) => {
+export const uploadProductImage = async (fileBuffer, fileName) => {
   try {
     return await uploadToCloudinary(fileBuffer, 'megg-products', fileName);
   } catch (error) {
@@ -219,7 +219,7 @@ export const deleteReelVideo = async (videoUrl) => {
   }
 };
 
-export const uploadOfferBanner = async (fileBuffer, fileName, mimeType) => {
+export const uploadOfferBanner = async (fileBuffer, fileName) => {
   try {
     return await uploadToCloudinary(fileBuffer, 'megg-offers', fileName);
   } catch (error) {
@@ -227,7 +227,7 @@ export const uploadOfferBanner = async (fileBuffer, fileName, mimeType) => {
   }
 };
 
-export const uploadColorComboImage = async (fileBuffer, fileName, mimeType) => {
+export const uploadColorComboImage = async (fileBuffer, fileName) => {
   try {
     return await uploadToCloudinary(fileBuffer, 'megg-color-combos', fileName);
   } catch (error) {

@@ -24,7 +24,7 @@ export const STYLE_KEYWORDS = {
     keywords: ['casual', 'everyday', 'relaxed', 'comfortable', 'weekend']
   },
   formal: {
-    categories: ['Shirt', 'Mens Accessories', 'Shoes', 'Sweater', 'Office wear'],
+    categories: ['Shirt', 'Mens Accessories', 'Shoes', 'Sweater', 'Office Wear'],
     description: 'Formal wear',
     keywords: ['formal', 'business', 'professional', 'office', 'work', 'dress']
   },
@@ -34,7 +34,7 @@ export const STYLE_KEYWORDS = {
     keywords: ['smart casual', 'semi-formal', 'smart', 'classy']
   },
   athletic: {
-    categories: ['Tshirt', 'Hoodies', 'Trackpants', 'Shoes', 'Sports'],
+    categories: ['Tshirt', 'Hoodies', 'Trackpants', 'Shoes', 'Sports Wear'],
     description: 'Athletic wear',
     keywords: ['athletic', 'sport', 'gym', 'workout', 'active', 'fitness']
   },
@@ -70,125 +70,138 @@ export const CATEGORY_KEYWORDS = {
   'Jeans': ['jeans', 'denim', 'blue jeans', 'pants', 'trousers'],
   'Trackpants': ['trackpants', 'track pants', 'joggers', 'sweatpants', 'lower', 'bottoms'],
   'Shoes': ['shoes', 'sneakers', 'trainers', 'kicks', 'footwear'],
-  'Mens Accessories': ['accessories', 'watch', 'watches', 'bag', 'bags', 'cap', 'caps', 'tie', 'belt', 'sunglasses', 'ring', 'rings', 'locket', 'lockets'],
-  'Sports': ['sports', 'gym', 'athletic', 'workout', 'football', 'badminton'],
-  'Office wear': ['office', 'formal', 'business', 'professional', 'corporate', 'suit', 'blazer', 'tuxedo'],
-
-  'Skin care': ['skin care', 'skincare', 'facewash', 'face wash', 'moisturizer', 'moisturiser', 'sunscreen', 'serum', 'cleanser'],
-  'Traditional': ['traditional', 'ethnic', 'festive', 'kurta', 'sherwani', 'dhoti', 'indo western', 'koti'],
-  'Perfume': ['perfume', 'fragrance', 'cologne', 'scent', 'edt', 'edc', 'edp'],
-  'Innerwear': ['innerwear', 'inner wear', 'trunks', 'boxers', 'vests', 'briefs', 'thermal', 'thermals', 'underwear', 'undergarments'],
-  'Daily Essentials': ['daily essentials', 'essentials', 'storage', 'organizers', 'travel essentials', 'grooming tools', 'electronics', 'cleaning', 'care', 'everyday carry', 'home essentials']
+  'Mens Accessories': ['accessories', 'watch', 'watches', 'bag', 'bags', 'cap', 'caps', 'belt', 'sunglasses', 'ring', 'rings', 'chain', 'chains'],
+  'Sports Wear': ['sports', 'gym', 'athletic', 'workout', 'football', 'badminton', 'sports wear'],
+  'Office Wear': ['office', 'formal', 'business', 'professional', 'corporate', 'suit', 'blazer', 'tuxedo'],
+  'Body Care': ['body care', 'skincare', 'facewash', 'face wash', 'moisturizer', 'moisturiser', 'sunscreen', 'serum', 'shampoo', 'body wash', 'hair oil'],
+  'Traditional': ['traditional', 'ethnic', 'festive', 'kurta', 'sherwani', 'dhoti', 'indo western', 'nehru jacket'],
+  'Perfume': ['perfume', 'fragrance', 'cologne', 'scent', 'luxurious', 'budget friendly'],
+  'Innerwear': ['innerwear', 'inner wear', 'trunks', 'boxers', 'vests', 'thermal', 'thermals', 'underwear', 'undergarments']
 };
 
 export const SUBCATEGORY_KEYWORDS = {
-  'Puffer': ['puffer', 'puffer jacket', 'padded jacket'],
-  'Leather': ['leather', 'leather jacket'],
-  'Varsity': ['varsity', 'varsity jacket', 'letterman'],
-  'Bomber': ['bomber', 'bomber jacket'],
-  'Biker': ['biker', 'biker jacket', 'motorcycle jacket'],
-  'Half Jacket': ['half jacket', 'cropped jacket'],
-  'Casual Jacket': ['casual jacket'],
+  // Jacket subcategories
+  'Puffer Jacket': ['puffer', 'puffer jacket', 'padded jacket'],
+  'Leather Jacket': ['leather', 'leather jacket'],
+  'Varsity Jacket': ['varsity', 'varsity jacket', 'letterman'],
+  'Bomber Jacket': ['bomber', 'bomber jacket'],
+  'Biker Jacket': ['biker', 'biker jacket', 'motorcycle jacket'],
   'Denim Jacket': ['denim jacket', 'jean jacket'],
-  'Wind-cheater': ['windcheater', 'wind cheater', 'windbreaker'],
+  'Windcheater': ['windcheater', 'wind cheater', 'windbreaker'],
+  'Suede Jacket': ['suede', 'suede jacket'],
+  'Half Jacket': ['half jacket', 'cropped jacket'],
+  'Overcoat': ['overcoat', 'trench coat'],
+
+  // Hoodies subcategories
+  'Regular Hoodie': ['regular hoodie', 'hoodie', 'pullover hoodie'],
   'Zip Hoodie': ['zip hoodie', 'zipper hoodie', 'full zip'],
-  'Pullover Hoodie': ['pullover', 'pullover hoodie', 'hoodie'],
-  'V Neck Sweater': ['v neck', 'v-neck sweater'],
+  'Printed Hoodie': ['printed hoodie', 'graphic hoodie'],
+
+  // Sweater subcategories
   'Round Neck Sweater': ['round neck', 'crew neck sweater'],
-  'Turtle Neck Sweater': ['turtle neck', 'turtleneck'],
+  'V-Neck Sweater': ['v neck', 'v-neck sweater'],
+  'Turtleneck Sweater': ['turtle neck', 'turtleneck'],
   'Polo Neck Sweater': ['polo neck sweater'],
   'Sweater Vest': ['sweater vest', 'vest'],
   'Cardigan': ['cardigan'],
+  'Zip Sweater': ['zip sweater', 'zipper sweater'],
+
+  // Sweatshirt subcategories
   'Oversized Sweatshirt': ['oversized sweatshirt'],
-  'Graphic Sweatshirt': ['graphic', 'printed sweatshirt'],
-  'Normal Sweatshirt': ['sweatshirt', 'crewneck'],
-  'Check Shirt': ['check', 'checked', 'plaid', 'checkered'],
+  'Printed Sweatshirt': ['printed sweatshirt', 'graphic sweatshirt'],
+  'Pullover Sweatshirt': ['pullover', 'pullover sweatshirt'],
+  'Zip Sweatshirt': ['zip sweatshirt', 'zipper sweatshirt'],
+
+  // Shirt subcategories
+  'Checked Shirt': ['check', 'checked', 'plaid', 'checkered'],
   'Striped Shirt': ['stripe', 'striped'],
   'Printed Shirt': ['printed', 'print'],
   'Linen Shirt': ['linen', 'linen shirt'],
   'Textured Shirt': ['textured'],
-  'Half Shirt': ['half sleeve', 'short sleeve'],
+  'Half-Sleeve Shirt': ['half sleeve', 'short sleeve'],
   'Solid Shirt': ['solid', 'plain'],
   'Shacket': ['shacket', 'shirt jacket'],
-  'Formal Shirt': ['formal', 'dress shirt'],
-  'Cuban Shirt': ['cuban', 'cuban collar'],
-  'Wide Leg Jeans': ['wide leg', 'baggy jeans'],
+
+  // Jeans subcategories
+  'Wide-Leg Jeans': ['wide leg', 'baggy jeans'],
   'Straight Fit Jeans': ['straight', 'straight fit'],
-  'Cargo Jeans': ['cargo', 'cargo pants'],
-  'Linen Pants': ['linen pants', 'linen trousers'],
+  'Cargo Pants': ['cargo', 'cargo pants'],
   'Bootcut Jeans': ['bootcut', 'boot cut'],
-  'Formal Pants': ['formal pants', 'dress pants', 'trousers'],
   'Chinos': ['chinos', 'khaki'],
+  'Linen Pants': ['linen pants', 'linen trousers'],
+
+  // Trackpants subcategories
   'Baggy Trackpants': ['baggy', 'loose fit'],
   'Cargo Trackpants': ['cargo trackpants'],
-  'Straight Fit Trackpants': ['straight trackpants'],
+
+  // Shoes subcategories
   'Sneakers': ['sneakers', 'kicks'],
-  'Sports Shoes': ['sports shoes', 'running shoes', 'trainers'],
-  'Walking Shoes': ['walking shoes'],
   'Clogs': ['clogs'],
   'Boots': ['boots'],
-  'Formal Shoes': ['formal shoes', 'dress shoes', 'oxford'],
   'Loafers': ['loafers'],
   'Canvas Shoes': ['canvas', 'canvas shoes'],
-  'Polo Tshirt': ['polo', 'polo shirt'],
-  'Oversized Tshirt': ['oversized tshirt', 'oversized t-shirt', 'oversized tee', 'oversized t shirt', 'oversized'],
-  'Full Sleeve Tshirt': ['full sleeve', 'long sleeve'],
-  'Gym Tshirt': ['gym tshirt', 'workout tshirt'],
-  'V Neck Tshirt': ['v neck tshirt'],
-  'Round Neck Tshirt': ['round neck tshirt'],
-  'Printed Tshirt': ['printed tshirt', 'graphic tee'],
-  'Normal Tshirt': ['normal tshirt', 'regular tshirt', 'basic tshirt', 'plain tshirt', 'tshirt', 'tee'],
+
+  // Tshirt subcategories
+  'Regular Fit T-Shirt': ['regular fit', 'regular tshirt', 'basic tshirt', 'plain tshirt', 'tshirt', 'tee'],
+  'Oversized T-Shirt': ['oversized tshirt', 'oversized t-shirt', 'oversized tee', 'oversized t shirt', 'oversized'],
+  'Polo T-Shirt': ['polo', 'polo shirt', 'polo tshirt'],
+  'Full-Sleeve T-Shirt': ['full sleeve', 'long sleeve'],
+  'Gym T-Shirt': ['gym tshirt', 'workout tshirt'],
+
+  // Mens_Accessories subcategories
   'Bags': ['bag', 'backpack', 'messenger', 'duffel'],
   'Caps': ['cap', 'hat', 'snapback', 'baseball cap'],
   'Watches': ['watch', 'wristwatch', 'timepiece'],
-  'Tie': ['tie', 'necktie'],
-  'Belt': ['belt'],
+  'Belts': ['belt', 'belts'],
   'Sunglasses': ['sunglasses', 'shades'],
   'Rings': ['ring', 'rings'],
-  'Lockets': ['locket', 'pendant', 'necklace'],
-  'Sports Shorts': ['sports shorts'],
+  'Chains': ['chain', 'chains', 'necklace', 'pendant'],
+
+  // Sports_Wear subcategories
+  'Shorts': ['shorts', 'sports shorts'],
   'Sports Jacket': ['sports jacket', 'track jacket'],
   'Socks': ['socks'],
-  'Sports Shoes General': ['sports shoes'],
   'Football Shoes': ['football shoes', 'cleats'],
   'Badminton Shoes': ['badminton shoes'],
-  'Gym Tee': ['gym tee', 'workout shirt'],
-  'Formal Pants Office': ['formal pants', 'office pants'],
-  'Formal Shirts Office': ['formal shirt', 'office shirt'],
+  'Sports Shoes': ['sports shoes', 'running shoes', 'trainers'],
+
+  // Office_Wear subcategories
+  'Formal Shirts': ['formal shirt', 'office shirt', 'dress shirt'],
+  'Formal Pants': ['formal pants', 'office pants', 'dress pants', 'trousers'],
+  'Formal Shoes': ['formal shoes', 'dress shoes', 'oxford'],
   'Suits': ['suit'],
   'Tuxedo': ['tuxedo', 'tux'],
-  'Formal Shoes Office': ['formal shoes'],
-  'Loafers Office': ['loafers'],
   'Blazers': ['blazer'],
-  'Ties & Pocket Squares': ['tie', 'pocket square'],
+  'Ties & Pocket Squares': ['tie', 'pocket square', 'necktie'],
+
+  // Body_Care subcategories
   'Face Wash': ['face wash', 'facewash', 'cleanser'],
   'Moisturiser': ['moisturizer', 'moisturiser', 'lotion'],
-  'Cleanser': ['cleanser'],
   'Sunscreen': ['sunscreen', 'spf'],
   'Serum': ['serum'],
+  'Underarm Roll-On': ['underarm roll-on', 'roll on', 'deodorant'],
+  'Shampoo': ['shampoo'],
+  'Body Wash': ['body wash', 'shower gel'],
+  'Hair Oil': ['hair oil'],
+
+  // Traditional subcategories
   'Kurta': ['kurta'],
-  'Koti': ['koti', 'nehru jacket'],
   'Pyjama': ['pyjama', 'pajama'],
   'Short Kurta': ['short kurta'],
-  'Blazer Traditional': ['traditional blazer'],
   'Kurta Set': ['kurta set', 'kurta pyjama'],
-  'Indo-western': ['indo western', 'fusion wear'],
-  'EDT': ['edt', 'eau de toilette'],
-  'EDC': ['edc', 'eau de cologne'],
-  'EDP': ['edp', 'eau de parfum'],
+  'Indo-Western Outfit': ['indo western', 'fusion wear'],
+  'Nehru Jacket': ['nehru jacket', 'koti'],
+  'Ethnic Shoes': ['ethnic shoes', 'mojari', 'juttis'],
+
+  // Perfume subcategories
+  'Luxurious': ['luxurious', 'luxury', 'premium', 'expensive', 'edp', 'eau de parfum'],
+  'Budget-Friendly': ['budget', 'budget friendly', 'affordable', 'edt', 'edc', 'eau de toilette', 'eau de cologne'],
+
+  // Innerwear subcategories
   'Trunks': ['trunks', 'trunk'],
-  'Boxers': ['boxers', 'boxer', 'boxer shorts'],
   'Vests': ['vests', 'vest', 'sleeveless'],
-  'Briefs': ['briefs', 'brief'],
-  'Thermal Top': ['thermal top', 'thermal shirt'],
-  'Thermal Bottom': ['thermal bottom', 'thermal pants'],
-  'Thermal Set': ['thermal set', 'thermal wear set'],
-  'Storage & Organizers': ['storage', 'organizers', 'organizer', 'storage box'],
-  'Travel Essentials': ['travel essentials', 'travel', 'luggage'],
-  'Grooming Tools': ['grooming tools', 'grooming', 'trimmer', 'razor'],
-  'Electronics': ['electronics', 'gadgets', 'tech'],
-  'Everyday Carry': ['everyday carry', 'edc', 'carry'],
-  'Home Essentials': ['home essentials', 'home', 'household']
+  'Boxers': ['boxers', 'boxer', 'boxer shorts'],
+  'Thermal Wear': ['thermal', 'thermals', 'thermal wear', 'thermal set']
 };
 
 export const BRAND_KEYWORDS = {

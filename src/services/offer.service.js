@@ -4,7 +4,6 @@ import logger from '../utils/logger.js';
 
 export const listOffers = async ({ page, limit }) => {
   const offset = (page - 1) * limit;
-  const now = new Date().toISOString();
 
   const { data, error, count } = await supabaseAdmin
     .from('offers')
@@ -80,7 +79,7 @@ export const updateOffer = async (id, updates) => {
 
   const { data, error } = await supabaseAdmin
     .from('offers')
-    .update(updates)
+    .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id)
     .select()
     .single();

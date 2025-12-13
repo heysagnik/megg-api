@@ -60,29 +60,6 @@ const isFuzzyMatch = (text, keyword) => {
   return distance <= allowedDistance;
 };
 
-const isQueryRedundantWithFilters = (query, category, subcategory) => {
-  if (!query) return true;
-  const q = String(query).toLowerCase().trim();
-  if (!q) return true;
-
-  if (subcategory && SUBCATEGORY_KEYWORDS[subcategory]) {
-    const subKw = SUBCATEGORY_KEYWORDS[subcategory];
-    if (subKw?.some(kw => isFuzzyMatch(q, String(kw).toLowerCase()))) {
-      return true;
-    }
-    if (isFuzzyMatch(q, subcategory.toLowerCase())) return true;
-  }
-
-  if (category && CATEGORY_KEYWORDS[category]) {
-    const catKw = CATEGORY_KEYWORDS[category];
-    if (catKw?.some(kw => isFuzzyMatch(q, String(kw).toLowerCase()))) {
-      return true;
-    }
-    if (isFuzzyMatch(q, category.toLowerCase())) return true;
-  }
-
-  return false;
-};
 
 const findBestCategoryMatch = (queryWords) => {
   const scores = [];
@@ -381,10 +358,10 @@ export const unifiedSearch = async ({
       // Clean and normalize the search term
       // Remove FTS special characters but preserve apostrophes for words like "POND'S"
       const cleanTerm = term.replace(/[|&:*!()]/g, ' ').trim();
-      
+
       if (cleanTerm) {
         const words = cleanTerm.split(/\s+/).filter(w => w.length > 0);
-        
+
         if (words.length > 0) {
           if (isRelaxed) {
             // Relaxed: OR logic between terms with prefix matching
@@ -513,7 +490,7 @@ export const getSearchSuggestions = async (partialQuery) => {
       .filter(w => w.length > 0)
       .map(w => `'${w.replace(/'/g, "''")}':*`)
       .join(' & ');
-    
+
     const { data: products } = await supabaseAdmin
       .from('products')
       .select('name, brand, category, subcategory, color, popularity')

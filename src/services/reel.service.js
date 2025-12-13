@@ -83,7 +83,7 @@ export const updateReel = async (id, updates) => {
 
   const { data, error } = await supabaseAdmin
     .from('reels')
-    .update(updates)
+    .update({ ...updates, updated_at: new Date().toISOString() })
     .eq('id', id)
     .select()
     .single();
@@ -228,10 +228,6 @@ export const getLikedReelsByUser = async (userId) => {
   }
 
   const reelIds = likes.map(like => like.reel_id);
-
-  if (reelIds.length === 0) {
-    return [];
-  }
 
   const { data: reels, error: reelsError } = await supabaseAdmin
     .from('reels')
