@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -11,7 +12,9 @@ if (!process.env.DATABASE_URL) {
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    ssl: process.env.DATABASE_URL?.includes('neon') || process.env.NODE_ENV === 'production'
+        ? { rejectUnauthorized: false }
+        : false,
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
@@ -84,18 +87,18 @@ export const auth = betterAuth({
     },
 
     advanced: {
-        generateId: undefined,
+        generateId: () => randomUUID(),
         crossSubDomainCookies: {
-            enabled: true,
+            enabled: false,
         },
-         cookies: {
-         state: {
-            attributes: {
-            sameSite: "none",
-            secure: true,
+        cookies: {
+            state: {
+                attributes: {
+                    sameSite: "none",
+                    secure: true,
+                }
             }
-        }
-    },
+        },
 
         useSecureCookies: process.env.NODE_ENV === 'production',
     },
