@@ -86,7 +86,7 @@ export const auth = betterAuth({
     advanced: {
         generateId: undefined,
         crossSubDomainCookies: {
-            enabled: false,
+            enabled: true,
         },
         cookies: {
             state: {
