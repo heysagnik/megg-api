@@ -33,13 +33,14 @@ app.use(cors({
   ].filter(Boolean),
   credentials: true
 }));
+// Better Auth handler MUST come BEFORE express.json()
+import { toNodeHandler } from 'better-auth/node';
+import { auth } from './config/auth.js';
+app.all(/^\/api\/auth(\/.*)?$/, toNodeHandler(auth));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-import { toNodeHandler } from 'better-auth/node'; // Better Auth
-import { auth } from './config/auth.js';
-
-app.all('/api/auth/*', toNodeHandler(auth));
 app.use('/api', routes);
 
 app.get('/', (req, res) => {
