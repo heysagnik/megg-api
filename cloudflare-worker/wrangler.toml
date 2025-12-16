@@ -13,7 +13,7 @@ id = "b909f0f2d9aa4adc95c91b8230c3f9ad"
 
 [vars]
 ORIGIN_URL = "https://megg-api.vercel.app"
-# FRONTEND_URL = "https://your-frontend.com" # Uncomment to restrict CORS
+FRONTEND_URL = "https://megg-admin.vercel.app" 
 DEFAULT_CACHE_TTL = "900"
 MAX_CACHE_TTL = "3600"
 EMBEDDING_MODEL = "@cf/baai/bge-small-en-v1.5"
