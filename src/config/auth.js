@@ -89,8 +89,8 @@ export const auth = betterAuth({
                     path: "/",
                 }
             },
-            oauth_state: {
-                name: "better-auth.oauth_state",
+            state: {
+                name: "better-auth.state",
                 attributes: {
                     sameSite: "none",
                     secure: true,
@@ -112,9 +112,10 @@ export const auth = betterAuth({
     account: {
         accountLinking: {
             enabled: true,
-            // Allow linking accounts with same email
             trustedProviders: ["google"],
-        }
+        },
+        // Store OAuth state in database instead of cookies (more reliable for cross-origin)
+        storeStateInDatabase: true,
     },
 });
 
