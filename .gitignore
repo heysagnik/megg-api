@@ -12,3 +12,5 @@ build/
 migrations/
 postman_collection.json
 supabase/
+
+*/.dev.vars

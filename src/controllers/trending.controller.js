@@ -1,4 +1,5 @@
 import * as trendingService from '../services/trending.service.js';
+import * as productService from '../services/product.service.js';
 
 export const getTrendingProducts = async (req, res, next) => {
   try {
@@ -16,7 +17,13 @@ export const getTrendingProducts = async (req, res, next) => {
 export const trackClick = async (req, res, next) => {
   try {
     const userId = req.user?.id || null;
-    await trendingService.trackProductClick(req.params.productId, userId);
+    const { productId } = req.params;
+
+    // Track user history (if logged in) and global counter
+    await Promise.all([
+      trendingService.trackProductClick(productId, userId),
+      productService.incrementProductClicks(productId)
+    ]);
 
     res.json({
       success: true,

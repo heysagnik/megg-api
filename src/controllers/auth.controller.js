@@ -61,3 +61,27 @@ export const checkAdminStatus = async (req, res, next) => {
   }
 };
 
+export const mobileGoogleAuth = async (req, res, next) => {
+  try {
+    const { idToken } = req.body;
+    const ipAddress = req.ip || req.socket?.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+
+    const { user, session } = await authService.exchangeGoogleIdToken(idToken, userAgent, ipAddress);
+
+    res.json({
+      success: true,
+      data: {
+        user,
+        session: {
+          token: session.token,
+          expiresAt: session.expiresAt
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+

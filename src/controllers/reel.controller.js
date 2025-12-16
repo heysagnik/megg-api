@@ -2,12 +2,19 @@ import * as reelService from '../services/reel.service.js';
 
 export const listAllReels = async (req, res, next) => {
   try {
-    const reels = await reelService.listAllReels();
+    const { page, limit } = req.query;
+    const result = await reelService.listAllReels({ page, limit });
 
-    res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
+    res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     res.json({
       success: true,
-      data: reels
+      data: result.reels,
+      pagination: {
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+        totalPages: result.totalPages
+      }
     });
   } catch (error) {
     next(error);
@@ -16,12 +23,19 @@ export const listAllReels = async (req, res, next) => {
 
 export const listReelsByCategory = async (req, res, next) => {
   try {
-    const reels = await reelService.listReelsByCategory(req.params.category);
+    const { page, limit } = req.query;
+    const result = await reelService.listReelsByCategory(req.params.category, { page, limit });
 
-    res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
+    res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
     res.json({
       success: true,
-      data: reels
+      data: result.reels,
+      pagination: {
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+        totalPages: result.totalPages
+      }
     });
   } catch (error) {
     next(error);
@@ -62,7 +76,7 @@ export const updateReel = async (req, res, next) => {
       body: req.body,
       bodyKeys: Object.keys(req.body)
     });
-    
+
     const reel = await reelService.updateReel(req.params.id, req.body);
 
     res.json({

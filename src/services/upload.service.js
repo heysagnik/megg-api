@@ -1,272 +1,188 @@
-import cloudinary from '../config/cloudinary.js';
-import { supabaseAdmin } from '../config/supabase.js';
+import sharp from 'sharp';
+import { uploadToR2, deleteFromR2, R2_PUBLIC_URL } from '../config/r2.js';
 import logger from '../utils/logger.js';
 
-/**
- * Helper to upload a file buffer to Cloudinary
- * @param {Buffer} fileBuffer 
- * @param {string} folder 
- * @param {string} fileName 
- * @param {string} resourceType 
- * @returns {Promise<string>} Secure URL of the uploaded asset
- */
-const uploadToCloudinary = (fileBuffer, folder, fileName, resourceType = 'image') => {
-  return new Promise((resolve, reject) => {
-    const uploadStream = cloudinary.uploader.upload_stream(
-      {
-        resource_type: resourceType,
-        folder: folder,
-        public_id: `${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.-]/g, '_')}`,
-        format: resourceType === 'image' ? 'webp' : undefined, // Convert images to webp
-        quality: 'auto'
-      },
-      (error, result) => {
-        if (error) {
-          return reject(new Error(`Cloudinary upload failed: ${error.message}`));
-        }
-        resolve(result.secure_url);
-      }
-    );
-    uploadStream.end(fileBuffer);
-  });
-};
+const IMAGE_VARIANTS = [
+  { name: 'thumb', width: 100, quality: 70 },
+  { name: 'medium', width: 400, quality: 80 },
+  { name: 'large', width: 800, quality: 85 }
+];
 
-/**
- * Helper to extract public ID from Cloudinary URL
- * @param {string} url 
- * @returns {string|null}
- */
-const getPublicIdFromUrl = (url) => {
-  try {
-    const parts = url.split('/');
-    const filenameWithExt = parts.pop();
-    const publicId = filenameWithExt.split('.')[0];
-    // Join the folder path if it exists (everything after 'upload/v<version>/')
-    // This is a simplified extraction, might need adjustment based on exact URL structure
-    // Standard Cloudinary URL: https://res.cloudinary.com/<cloud_name>/image/upload/v<version>/<folder>/<public_id>.<ext>
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
 
-    const uploadIndex = parts.indexOf('upload');
-    if (uploadIndex === -1) return null;
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 
-    // parts after 'upload' might include version 'v12345' which we skip for public_id construction if we use folder
-    // But cloudinary public_id usually includes the folder.
-    // Let's try to reconstruct from the folder known in this app.
-
-    // Better approach: Regex
-    const regex = /\/upload\/(?:v\d+\/)?(.+)\.[a-zA-Z0-9]+$/;
-    const match = url.match(regex);
-    if (match && match[1]) {
-      return match[1];
-    }
-    return null;
-  } catch (e) {
-    return null;
+const validateImageFile = (file) => {
+  if (!file || !file.buffer) {
+    throw new Error('No file provided');
+  }
+  if (file.size > MAX_IMAGE_SIZE) {
+    throw new Error(`File too large. Maximum size is ${MAX_IMAGE_SIZE / 1024 / 1024}MB`);
+  }
+  if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
+    throw new Error(`Invalid file type. Allowed: ${ALLOWED_IMAGE_TYPES.join(', ')}`);
   }
 };
 
-export const uploadProductImage = async (fileBuffer, fileName) => {
+const validateVideoFile = (file) => {
+  if (!file || !file.buffer) {
+    throw new Error('No file provided');
+  }
+  if (file.size > MAX_VIDEO_SIZE) {
+    throw new Error(`File too large. Maximum size is ${MAX_VIDEO_SIZE / 1024 / 1024}MB`);
+  }
+  if (!ALLOWED_VIDEO_TYPES.includes(file.mimetype)) {
+    throw new Error(`Invalid file type. Allowed: ${ALLOWED_VIDEO_TYPES.join(', ')}`);
+  }
+};
+
+const processAndUploadImage = async (fileBuffer, folder, baseKey) => {
+  const urls = {};
+  const metadata = await sharp(fileBuffer).metadata();
+
+  if (metadata.width > 4000 || metadata.height > 4000) {
+    throw new Error('Image dimensions too large. Maximum 4000x4000 pixels');
+  }
+
+  for (const variant of IMAGE_VARIANTS) {
+    const processed = await sharp(fileBuffer)
+      .resize(variant.width, null, { withoutEnlargement: true })
+      .webp({ quality: variant.quality })
+      .toBuffer();
+
+    const key = `${folder}/${baseKey}_${variant.name}.webp`;
+    urls[variant.name] = await uploadToR2(key, processed, 'image/webp');
+  }
+
+  urls.original = {
+    width: metadata.width,
+    height: metadata.height,
+    format: metadata.format
+  };
+
+  return urls;
+};
+
+export const uploadProductImage = async (file, productId, index = 0) => {
   try {
-    return await uploadToCloudinary(fileBuffer, 'megg-products', fileName);
+    validateImageFile(file);
+    const baseKey = `${productId}/${Date.now()}_${index}`;
+    return await processAndUploadImage(file.buffer, 'products', baseKey);
   } catch (error) {
+    logger.error(`Product image upload failed: ${error.message}`);
     throw new Error(`Failed to upload product image: ${error.message}`);
   }
 };
 
-export const uploadMultipleProductImages = async (files) => {
-  try {
-    const uploadPromises = files.map(file =>
-      uploadProductImage(file.buffer, file.originalname, file.mimetype)
-    );
+export const uploadMultipleProductImages = async (files, productId) => {
+  if (!files || files.length === 0) {
+    throw new Error('No files provided');
+  }
+  if (files.length > 10) {
+    throw new Error('Maximum 10 images per upload');
+  }
 
-    const urls = await Promise.all(uploadPromises);
-    return urls;
+  try {
+    const uploadPromises = files.map((file, index) =>
+      uploadProductImage(file, productId, index)
+    );
+    return await Promise.all(uploadPromises);
   } catch (error) {
+    logger.error(`Multiple image upload failed: ${error.message}`);
     throw new Error(`Failed to upload product images: ${error.message}`);
   }
 };
 
-export const deleteProductImage = async (imageUrl) => {
+export const deleteProductImage = async (imageData) => {
   try {
-    // Check if it's a Supabase URL
-    if (imageUrl.includes('supabase.co')) {
-      let filePath = null;
-      try {
-        const parsed = new URL(imageUrl);
-        const pathSegments = parsed.pathname.split('/').filter(Boolean);
-        const idx = pathSegments.findIndex((seg) => seg === 'product-images');
-        if (idx !== -1) {
-          filePath = pathSegments.slice(idx + 1).join('/');
-        }
-      } catch (e) {
-        const match = imageUrl.match(/product-images\/(.+?)(\?|$)/);
-        if (match && match[1]) {
-          filePath = match[1];
-        }
-      }
+    if (!imageData) return true;
 
-      if (filePath) {
-        const { error } = await supabaseAdmin.storage
-          .from('product-images')
-          .remove([filePath]);
-        if (error) return false;
-        return true;
-      }
+    if (typeof imageData === 'object') {
+      const deletePromises = Object.entries(imageData)
+        .filter(([key, value]) => key !== 'original' && typeof value === 'string')
+        .map(([_, url]) => deleteFromR2(url));
+      await Promise.all(deletePromises);
+    } else if (typeof imageData === 'string' && imageData.includes(R2_PUBLIC_URL)) {
+      await deleteFromR2(imageData);
     }
-    // Check if it's a Cloudinary URL
-    else if (imageUrl.includes('cloudinary.com')) {
-      const publicId = getPublicIdFromUrl(imageUrl);
-      if (publicId) {
-        logger.info(`Attempting to delete Cloudinary image: ${publicId}`);
-        const result = await cloudinary.uploader.destroy(publicId);
-        logger.info(`Cloudinary deletion result for ${publicId}:`, result);
-
-        if (result.result === 'ok' || result.result === 'not found') {
-          return true;
-        } else {
-          logger.error(`Failed to delete Cloudinary image ${publicId}: ${result.result}`);
-          return false;
-        }
-      }
-    }
-
-    return 'skipped';
+    return true;
   } catch (error) {
+    logger.error(`Failed to delete image: ${error.message}`);
     return false;
   }
 };
 
-export const deleteMultipleProductImages = async (imageUrls) => {
-  const deletePromises = imageUrls.map(url => deleteProductImage(url));
-  const results = await Promise.all(deletePromises);
+export const deleteMultipleProductImages = async (imagesArray) => {
+  if (!imagesArray || !Array.isArray(imagesArray)) return true;
 
-  const failedCount = results.filter(r => r === false).length;
-
-  if (failedCount > 0) {
-    throw new Error(`Failed to delete ${failedCount} product image(s)`);
-  }
-
+  const deletePromises = imagesArray.map(img => deleteProductImage(img));
+  await Promise.allSettled(deletePromises);
   return true;
 };
 
-export const uploadReelVideo = async (fileBuffer, fileName) => {
+export const uploadReelVideo = async (file, reelId) => {
   try {
-    return new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          resource_type: 'video',
-          folder: 'megg-reels',
-          public_id: `reel-${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.-]/g, '_')}`,
-          quality: 'auto',
-          format: 'mp4',
-          eager: [
-            { format: 'jpg', transformation: [{ width: 500, crop: 'scale' }] }
-          ],
-          eager_async: false
-        },
-        (error, result) => {
-          if (error) {
-            return reject(new Error(`Cloudinary upload failed: ${error.message}`));
-          }
+    validateVideoFile(file);
 
-          const thumbnailUrl = result.eager && result.eager.length > 0
-            ? result.eager[0].secure_url
-            : `${result.secure_url.replace(/\.(mp4|mov|avi|webm)$/i, '.jpg')}`;
+    const videoKey = `reels/${reelId}/${Date.now()}_video.mp4`;
+    const videoUrl = await uploadToR2(videoKey, file.buffer, 'video/mp4');
 
-          resolve({
-            video_url: result.secure_url,
-            thumbnail_url: thumbnailUrl,
-            public_id: result.public_id,
-            duration: result.duration,
-            format: result.format,
-            size: result.bytes
-          });
-        }
-      );
-
-      uploadStream.end(fileBuffer);
-    });
+    return {
+      video_url: videoUrl,
+      thumbnail_url: null,
+      size: file.size
+    };
   } catch (error) {
-    throw new Error(`Failed to upload reel video to Cloudinary: ${error.message}`);
+    logger.error(`Reel video upload failed: ${error.message}`);
+    throw new Error(`Failed to upload reel video: ${error.message}`);
   }
 };
 
 export const deleteReelVideo = async (videoUrl) => {
   try {
-    const urlParts = videoUrl.split('/');
-    const fileWithExtension = urlParts[urlParts.length - 1];
-    const fileName = fileWithExtension.split('.')[0];
-
-    const folderIndex = urlParts.findIndex(part => part === 'megg-reels');
-    if (folderIndex === -1) {
-      return false;
-    }
-
-    const pathSegments = urlParts.slice(folderIndex);
-    const publicId = pathSegments.join('/').replace(/\.[^.]+$/, '');
-
-    logger.info(`Attempting to delete Cloudinary reel video: ${publicId}`);
-    const result = await cloudinary.uploader.destroy(publicId, { resource_type: 'video' });
-    logger.info(`Cloudinary deletion result for ${publicId}:`, result);
-
-    if (result.result === 'ok' || result.result === 'not found') {
-      return true;
-    } else {
-      logger.error(`Failed to delete Cloudinary reel video ${publicId}: ${result.result}`);
-      return false;
-    }
+    if (!videoUrl || !videoUrl.includes(R2_PUBLIC_URL)) return true;
+    await deleteFromR2(videoUrl);
+    return true;
   } catch (error) {
+    logger.error(`Failed to delete reel video: ${error.message}`);
     return false;
   }
 };
 
-export const uploadOfferBanner = async (fileBuffer, fileName) => {
+export const uploadOfferBanner = async (file, offerId) => {
   try {
-    return await uploadToCloudinary(fileBuffer, 'megg-offers', fileName);
+    validateImageFile(file);
+    const baseKey = `${offerId}/${Date.now()}`;
+    return await processAndUploadImage(file.buffer, 'offers', baseKey);
   } catch (error) {
+    logger.error(`Offer banner upload failed: ${error.message}`);
     throw new Error(`Failed to upload offer banner: ${error.message}`);
   }
 };
 
-export const uploadColorComboImage = async (fileBuffer, fileName) => {
+export const uploadColorComboImage = async (file, comboId) => {
   try {
-    return await uploadToCloudinary(fileBuffer, 'megg-color-combos', fileName);
+    validateImageFile(file);
+    const baseKey = `${comboId}/${Date.now()}`;
+    return await processAndUploadImage(file.buffer, 'color-combos', baseKey);
   } catch (error) {
+    logger.error(`Color combo image upload failed: ${error.message}`);
     throw new Error(`Failed to upload color combo image: ${error.message}`);
   }
 };
 
-export const deleteOfferBanner = async (imageUrl) => {
+export const deleteOfferBanner = deleteProductImage;
+
+export const uploadBannerImage = async (file, category) => {
   try {
-    if (imageUrl.includes('supabase.co')) {
-      const urlParts = imageUrl.split('/offer-banners/');
-      if (urlParts.length < 2) return false;
-
-      const filePath = urlParts[1].split('?')[0];
-
-      const { error } = await supabaseAdmin.storage
-        .from('offer-banners')
-        .remove([filePath]);
-
-      if (error) return false;
-      return true;
-    } else if (imageUrl.includes('cloudinary.com')) {
-      const publicId = getPublicIdFromUrl(imageUrl);
-      if (publicId) {
-        logger.info(`Attempting to delete Cloudinary offer banner: ${publicId}`);
-        const result = await cloudinary.uploader.destroy(publicId);
-        logger.info(`Cloudinary deletion result for ${publicId}:`, result);
-
-        if (result.result === 'ok' || result.result === 'not found') {
-          return true;
-        } else {
-          logger.error(`Failed to delete Cloudinary offer banner ${publicId}: ${result.result}`);
-          return false;
-        }
-      }
-    }
-    return false;
-  } catch (err) {
-    return false;
+    validateImageFile(file);
+    const sanitizedCategory = category.replace(/[^a-zA-Z0-9-_]/g, '');
+    const baseKey = `${sanitizedCategory}/${Date.now()}`;
+    return await processAndUploadImage(file.buffer, 'banners', baseKey);
+  } catch (error) {
+    logger.error(`Banner upload failed: ${error.message}`);
+    throw new Error(`Failed to upload banner: ${error.message}`);
   }
 };
-

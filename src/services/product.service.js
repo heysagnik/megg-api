@@ -1,227 +1,371 @@
-import { supabaseAdmin } from '../config/supabase.js';
-import { NotFoundError } from '../utils/errors.js';
+import { sql } from '../config/neon.js';
+import { NotFoundError, ValidationError } from '../utils/errors.js';
 import { PAGINATION } from '../config/constants.js';
 import logger from '../utils/logger.js';
+import { productDataSchemaRaw, listProductsParamsRaw } from '../validators/product.validators.js';
+import { OCCASION_MAP, FABRIC_PROPERTIES } from '../config/searchMappings.js';
 
-const applySorting = (query, sort) => {
-  switch (sort) {
-    case 'popularity':
-      return query.order('popularity', { ascending: false });
-    case 'price_asc':
-      return query.order('price', { ascending: true });
-    case 'price_desc':
-      return query.order('price', { ascending: false });
-    case 'oldest':
-      return query.order('created_at', { ascending: true });
-    case 'newest':
-    default:
-      return query.order('created_at', { ascending: false });
+const generateSemanticTags = (product) => {
+  const tags = new Set();
+  const { category, subcategory, brand, color, name = '', description = '', price } = product;
+
+  // Category/subcategory tags
+  if (category) {
+    tags.add(category.toLowerCase().replace(/\s+/g, '-'));
+    tags.add(category.toLowerCase());
+  }
+  if (subcategory) {
+    tags.add(subcategory.toLowerCase().replace(/\s+/g, '-'));
+    tags.add(subcategory.toLowerCase());
+  }
+  if (brand) tags.add(brand.toLowerCase());
+  if (color) tags.add(color.toLowerCase().trim());
+
+  // Occasion-based tags
+  Object.entries(OCCASION_MAP || {}).forEach(([occasion, config]) => {
+    if (config.categories?.includes(category)) {
+      tags.add(occasion);
+      config.tags?.forEach(t => tags.add(t));
+    }
+  });
+
+  // Season tags based on subcategory name/category
+  const winterItems = ['jacket', 'puffer', 'hoodie', 'sweater', 'thermal', 'fleece', 'coat'];
+  const summerItems = ['shorts', 'linen', 'half-sleeve', 'tank', 't-shirt', 'polo'];
+  const subLower = subcategory?.toLowerCase() || '';
+  const catLower = category?.toLowerCase() || '';
+  if (winterItems.some(w => subLower.includes(w) || catLower.includes(w))) tags.add('winter');
+  if (summerItems.some(s => subLower.includes(s) || catLower.includes(s))) tags.add('summer');
+
+  // Fabric tags from name/description
+  const text = `${name} ${description}`.toLowerCase();
+  Object.entries(FABRIC_PROPERTIES || {}).forEach(([property, fabrics]) => {
+    if (fabrics.some(f => text.includes(f))) {
+      tags.add(property);
+      fabrics.filter(f => text.includes(f)).forEach(f => tags.add(f));
+    }
+  });
+
+  // Color-based tags
+  const colorLower = color?.toLowerCase() || '';
+  if (['black', 'grey', 'gray', 'white', 'beige', 'brown'].includes(colorLower)) tags.add('neutral');
+  if (['black', 'navy', 'charcoal'].includes(colorLower)) tags.add('dark');
+
+  // Price tags
+  const priceNum = parseFloat(price) || 0;
+  if (priceNum < 500) tags.add('budget-friendly');
+  else if (priceNum < 1500) tags.add('mid-range');
+  else tags.add('premium');
+
+  return Array.from(tags).filter(t => t && t.length > 1);
+};
+
+const generateEmbedding = async (product) => {
+  const CF_ACCOUNT_ID = process.env.CF_ACCOUNT_ID;
+  const CF_API_TOKEN = process.env.CF_API_TOKEN;
+
+  if (!CF_ACCOUNT_ID || !CF_API_TOKEN) {
+    logger.warn('Cloudflare credentials not configured, skipping embedding generation');
+    return null;
+  }
+
+  try {
+    const { name = '', brand = '', category = '', subcategory = '', color = '', description = '' } = product;
+    const textForEmbedding = `${name} ${brand} ${category} ${subcategory} ${color} ${description}`.trim().substring(0, 500);
+
+    const response = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/ai/run/@cf/baai/bge-small-en-v1.5`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${CF_API_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text: [textForEmbedding] }),
+      }
+    );
+
+    if (!response.ok) {
+      logger.warn(`Embedding API returned ${response.status}, skipping embedding`);
+      return null;
+    }
+
+    const data = await response.json();
+    if (data.success && data.result?.data?.[0]) {
+      return `[${data.result.data[0].join(',')}]`;
+    }
+    return null;
+  } catch (error) {
+    logger.warn('Failed to generate embedding:', error.message);
+    return null;
   }
 };
-export const listProducts = async ({ category, subcategory, color, search, sort, page, limit }) => {
-  const p = Number.isInteger(Number(page)) && Number(page) > 0 ? Number(page) : 1;
-  const l = Math.max(1, Math.min(Number.isInteger(Number(limit)) ? Number(limit) : PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT));
-  const offset = (p - 1) * l;
 
-  let query = supabaseAdmin
-    .from('products')
-    .select('id, name, description, price, brand, images, category, subcategory, color, affiliate_link, popularity, clicks, created_at', { count: 'exact' });
+// Helper to build dynamic queries
+const buildQuery = (baseQuery, conditions, orderBy, limit, offset) => {
+  let query = baseQuery;
+  const values = [];
+  let paramCounter = 1;
 
-  if (category) query = query.eq('category', category);
-  if (subcategory) query = query.eq('subcategory', subcategory);
-  if (color) query = query.eq('color', color);
-  if (search) {
-    query = query.textSearch('search_vector', search, {
-      config: 'english',
-      type: 'plain'
+  if (conditions.length > 0) {
+    const whereClauses = conditions.map(c => {
+      if (c.value !== undefined) {
+        values.push(c.value);
+        return c.clause.replace('?', `$${paramCounter++}`);
+      }
+      return c.clause;
     });
+    query += ` WHERE ${whereClauses.join(' AND ')}`;
   }
 
-  query = applySorting(query, sort);
-  query = query.range(offset, offset + l - 1);
-
-  const { data, error, count } = await query;
-
-  if (error) {
-    throw new Error(`Failed to fetch products: ${error.message}`);
+  if (orderBy) {
+    query += ` ${orderBy}`;
   }
+
+  if (limit !== undefined) {
+    query += ` LIMIT $${paramCounter++}`;
+    values.push(limit);
+  }
+
+  if (offset !== undefined) {
+    query += ` OFFSET $${paramCounter++}`;
+    values.push(offset);
+  }
+
+  return { query, values };
+};
+
+export const listProducts = async (params) => {
+  const validation = listProductsParamsRaw.safeParse(params);
+  if (!validation.success) {
+    throw new ValidationError(validation.error.errors[0].message);
+  }
+
+  const { category, subcategory, color, search, sort, page, limit } = validation.data;
+  const offset = (page - 1) * limit;
+
+  let orderBy = 'ORDER BY created_at DESC';
+  switch (sort) {
+    case 'popularity': orderBy = 'ORDER BY popularity DESC'; break;
+    case 'price_asc': orderBy = 'ORDER BY price ASC'; break;
+    case 'price_desc': orderBy = 'ORDER BY price DESC'; break;
+    case 'oldest': orderBy = 'ORDER BY created_at ASC'; break;
+    case 'newest': orderBy = 'ORDER BY created_at DESC'; break;
+  }
+
+  const conditions = [{ clause: 'is_active = TRUE' }];
+  if (category) conditions.push({ clause: 'category = ?', value: category });
+  if (subcategory) conditions.push({ clause: 'subcategory = ?', value: subcategory });
+  if (color) conditions.push({ clause: 'color = ?', value: color });
+  if (search) conditions.push({ clause: "search_vector @@ plainto_tsquery('english', ?)", value: search });
+
+  // 1. Get Products
+  const listQ = buildQuery(
+    'SELECT id, name, description, price, brand, images, category, subcategory, color, affiliate_link, popularity, clicks, created_at FROM products',
+    conditions,
+    orderBy,
+    limit,
+    offset
+  );
+
+  // 2. Get Count
+  const countQ = buildQuery(
+    'SELECT COUNT(*)::int FROM products',
+    conditions
+    // no limit/offset/order
+  );
+
+  const [products, countResult] = await Promise.all([
+    sql(listQ.query, listQ.values),
+    sql(countQ.query, countQ.values)
+  ]);
+
+  const count = countResult[0]?.count || 0;
 
   return {
-    products: data,
+    products,
     total: count,
-    page: p,
-    limit: l,
-    totalPages: Math.ceil(count / l)
+    page,
+    limit,
+    totalPages: Math.ceil(count / limit)
   };
 };
 
-export const browseByCategory = async ({ category, subcategory, color, sort = 'popularity', page, limit }) => {
-  const p = Number.isInteger(Number(page)) && Number(page) > 0 ? Number(page) : 1;
-  const l = Math.max(1, Math.min(Number.isInteger(Number(limit)) ? Number(limit) : PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT));
-  const offset = (p - 1) * l;
+export const browseByCategory = async (params) => {
+  const validation = listProductsParamsRaw.safeParse(params);
+  if (!validation.success) {
+    throw new ValidationError(validation.error.errors[0].message);
+  }
 
-  let query = supabaseAdmin
-    .from('products')
-    .select('id, name, description, price, brand, images, category, subcategory, color, affiliate_link, popularity, clicks, created_at', { count: 'exact' })
-    .eq('category', category);
+  const { category, subcategory, color, sort, page, limit } = validation.data;
+  const offset = (page - 1) * limit;
 
-  if (subcategory) query = query.eq('subcategory', subcategory);
-  if (color) query = query.eq('color', color);
+  if (!category) throw new ValidationError('Category is required');
 
-  query = applySorting(query, sort);
-  query = query.range(offset, offset + l - 1);
+  let orderBy = 'ORDER BY popularity DESC';
+  switch (sort) {
+    case 'price_asc': orderBy = 'ORDER BY price ASC'; break;
+    case 'price_desc': orderBy = 'ORDER BY price DESC'; break;
+    case 'oldest': orderBy = 'ORDER BY created_at ASC'; break;
+    case 'newest': orderBy = 'ORDER BY created_at DESC'; break;
+  }
 
-  const productsPromise = query.then(({ data, error, count }) => {
-    if (error) throw new Error(`Failed to fetch products: ${error.message}`);
-    return { data, count };
-  });
+  const conditions = [{ clause: 'category = ?', value: category }];
+  if (subcategory) conditions.push({ clause: 'subcategory = ?', value: subcategory });
+  if (color) conditions.push({ clause: 'color = ?', value: color });
 
-  const bannersPromise = supabaseAdmin
-    .from('category_banners')
-    .select('id, banner_image, link, display_order')
-    .eq('category', category)
-    .order('display_order', { ascending: true })
-    .then(({ data, error }) => {
-      if (error) throw new Error(`Failed to fetch category banners: ${error.message}`);
-      return data;
-    });
+  const listQ = buildQuery(
+    'SELECT id, name, description, price, brand, images, category, subcategory, color, affiliate_link, popularity, clicks, created_at FROM products',
+    conditions,
+    orderBy,
+    limit,
+    offset
+  );
 
-  const [{ data: products, count }, banners] = await Promise.all([productsPromise, bannersPromise]);
+  const countQ = buildQuery('SELECT COUNT(*)::int FROM products', conditions);
+
+  const [products, countResult, banners] = await Promise.all([
+    sql(listQ.query, listQ.values),
+    sql(countQ.query, countQ.values),
+    sql('SELECT id, banner_image, link, display_order FROM category_banners WHERE category = $1 ORDER BY display_order ASC', [category])
+  ]);
+
+  const count = countResult[0]?.count || 0;
 
   return {
     category,
     banners: banners || [],
     products: products || [],
     total: count,
-    page: p,
-    limit: l,
-    totalPages: Math.ceil(count / l),
-    appliedFilters: {
-      subcategory,
-      color,
-      sort
-    }
+    page,
+    limit,
+    totalPages: Math.ceil(count / limit),
+    appliedFilters: { subcategory, color, sort }
   };
 };
 
 export const getProductById = async (id) => {
-  const { data, error } = await supabaseAdmin
-    .from('products')
-    .select('id, name, description, price, brand, images, category, subcategory, color, fabric, affiliate_link, is_active, clicks, popularity, created_at, updated_at')
-    .eq('id', id)
-    .single();
+  const [product] = await sql(
+    `SELECT id, name, description, price, brand, images, category, subcategory, color, fabric, affiliate_link, is_active, clicks, popularity, created_at, updated_at
+     FROM products
+     WHERE id = $1
+     LIMIT 1`,
+    [id]
+  );
 
-  if (error || !data) {
+  if (!product) {
     throw new NotFoundError('Product not found');
   }
 
+  // Fire and forget update
+  sql('UPDATE products SET popularity = popularity + 1 WHERE id = $1', [id]).catch(err =>
+    logger.error(`Failed to update popularity: ${err.message}`)
+  );
 
-  supabaseAdmin
-    .from('products')
-    .update({ popularity: (data.popularity || 0) + 1 })
-    .eq('id', id)
-    .then(() => { })
-    .catch(err => logger.error(`Failed to update popularity for product ${id}: ${err.message}`));
+  const recommended = await getRecommendedProducts(product.fabric, id);
 
-  const recommended = await getRecommendedProducts(data.fabric, id);
-
-  return { product: data, recommended };
+  return { product, recommended };
 };
 
 export const incrementProductClicks = async (id) => {
-  // Use the existing RPC for clicks
-  await supabaseAdmin.rpc('increment_product_clicks', { product_id: id });
+  await sql('SELECT increment_product_clicks($1)', [id]);
 };
 
 export const getRecommendedProducts = async (fabricTypes, excludeId) => {
-  if (!fabricTypes || fabricTypes.length === 0) {
-    return [];
-  }
+  if (!fabricTypes || fabricTypes.length === 0) return [];
 
-  const { data, error } = await supabaseAdmin
-    .from('products')
-    .select('id, name, price, brand, images, color, category, subcategory')
-    .neq('id', excludeId)
-    .in('color', fabricTypes)
-    .limit(6);
-
-  if (error) {
-    return [];
-  }
-
-  return data;
+  return await sql(
+    `SELECT id, name, price, brand, images, color, category, subcategory
+     FROM products
+     WHERE id != $1
+     AND color = ANY($2) 
+     LIMIT 6`,
+    [excludeId, fabricTypes]
+  );
 };
 
 export const getRelatedProducts = async (id) => {
-  // Optimize: Fetch only category instead of full product details
-  const { data: product, error: productError } = await supabaseAdmin
-    .from('products')
-    .select('category')
-    .eq('id', id)
-    .single();
+  const [product] = await sql('SELECT category FROM products WHERE id = $1', [id]);
+  if (!product) throw new NotFoundError('Product not found');
 
-  if (productError || !product) {
-    throw new NotFoundError('Product not found');
-  }
-
-  const { data, error } = await supabaseAdmin
-    .from('products')
-    .select('id, name, price, brand, images, color, category, subcategory')
-    .eq('category', product.category)
-    .neq('id', id)
-    .order('popularity', { ascending: false })
-    .limit(8);
-
-  if (error) {
-    return [];
-  }
-
-  return data;
+  return await sql(
+    `SELECT id, name, price, brand, images, color, category, subcategory
+     FROM products
+     WHERE category = $1
+     AND id != $2
+     ORDER BY popularity DESC
+     LIMIT 8`,
+    [product.category, id]
+  );
 };
 
 export const createProduct = async (productData) => {
-  const { data, error } = await supabaseAdmin
-    .from('products')
-    .insert(productData)
-    .select()
-    .single();
-
-  if (error) {
-    logger.error('Product creation error:', error);
-
-    if (error.code === '23514') {
-      throw new Error(`Invalid category or subcategory value. Please check that '${productData.category}' and '${productData.subcategory}' are valid enum values.`);
-    }
-    if (error.code === '22P02') {
-      throw new Error(`Invalid enum value provided: ${error.message}`);
-    }
-    if (error.code === '23505') {
-      throw new Error('A product with this identifier already exists.');
-    }
-
-    throw new Error(`Failed to create product: ${error.message}`);
+  const validation = productDataSchemaRaw.safeParse(productData);
+  if (!validation.success) {
+    throw new ValidationError(validation.error.errors[0].message);
   }
 
-  return data;
+  const validData = validation.data;
+  if (typeof validData.fabric === 'string') {
+    try {
+      if (validData.fabric.startsWith('[')) {
+        validData.fabric = JSON.parse(validData.fabric);
+      } else {
+        validData.fabric = [validData.fabric];
+      }
+    } catch (e) {
+      validData.fabric = [validData.fabric];
+    }
+  }
+
+  // Auto-generate semantic_tags
+  validData.semantic_tags = generateSemanticTags(validData);
+
+  try {
+    const keys = Object.keys(validData);
+    const cols = keys.map(k => `"${k}"`).join(', ');
+    const vals = keys.map((_, i) => `$${i + 1}`).join(', ');
+    const values = keys.map(k => validData[k]);
+
+    const [newProduct] = await sql(`
+      INSERT INTO products (${cols}) VALUES (${vals})
+      RETURNING *
+    `, values);
+
+    // Fire-and-forget: Generate embedding asynchronously
+    generateEmbedding(newProduct).then(embedding => {
+      if (embedding) {
+        sql('UPDATE products SET embedding = $1::vector WHERE id = $2', [embedding, newProduct.id])
+          .catch(err => logger.error('Failed to save embedding:', err.message));
+      }
+    }).catch(err => logger.warn('Embedding generation error:', err.message));
+
+    return newProduct;
+  } catch (error) {
+    logger.error('Product creation error:', error);
+    if (error.code === '23505') throw new Error('A product with this identifier already exists.');
+    throw new Error(`Failed to create product: ${error.message}`);
+  }
 };
 
 export const updateProduct = async (id, updates, newFiles = []) => {
-  const { data: existingProduct, error: fetchError } = await supabaseAdmin
-    .from('products')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (fetchError || !existingProduct) {
-    throw new NotFoundError('Product not found');
+  const validation = productDataSchemaRaw.partial().safeParse(updates);
+  if (!validation.success) {
+    throw new ValidationError(validation.error.errors[0].message);
   }
+
+  const [existingProduct] = await sql('SELECT images FROM products WHERE id = $1', [id]);
+
+  if (!existingProduct) throw new NotFoundError('Product not found');
+
+  const validUpdates = validation.data;
 
   if (updates.images !== undefined || newFiles.length > 0) {
     const currentImages = existingProduct.images || [];
     let keptImages = updates.images || [];
 
     if (!Array.isArray(keptImages)) keptImages = [keptImages];
-    keptImages = keptImages.filter(url => typeof url === 'string' && url.trim().length > 0);
+    keptImages = keptImages.filter(url => typeof url === 'string' && url.length > 0);
 
     const imagesToDelete = currentImages.filter(img => !keptImages.includes(img));
 
@@ -233,168 +377,97 @@ export const updateProduct = async (id, updates, newFiles = []) => {
     let newImageUrls = [];
     if (newFiles.length > 0) {
       const { uploadMultipleProductImages } = await import('./upload.service.js');
-      newImageUrls = await uploadMultipleProductImages(newFiles);
+      newImageUrls = await uploadMultipleProductImages(newFiles, id);
     }
 
-    updates.images = [...keptImages, ...newImageUrls];
+    validUpdates.images = [...keptImages, ...newImageUrls.map(u => u.medium || u.original || u)];
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('products')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .select()
-    .single();
+  try {
+    // Check if we need to regenerate semantic_tags and embedding
+    const shouldRegenerate = ['name', 'description', 'category', 'subcategory', 'color', 'brand', 'price']
+      .some(field => validUpdates[field] !== undefined);
 
-  if (error) {
-    logger.error('Product update error:', error);
+    if (shouldRegenerate) {
+      // Get full product data for tag generation
+      const [fullProduct] = await sql('SELECT * FROM products WHERE id = $1', [id]);
+      const mergedProduct = { ...fullProduct, ...validUpdates };
+      validUpdates.semantic_tags = generateSemanticTags(mergedProduct);
 
-    if (error.code === '23514' || error.code === '22P02') {
-      throw new Error(`Invalid enum value: ${error.message}`);
+      // Fire-and-forget: Regenerate embedding asynchronously
+      generateEmbedding(mergedProduct).then(embedding => {
+        if (embedding) {
+          sql('UPDATE products SET embedding = $1::vector WHERE id = $2', [embedding, id])
+            .catch(err => logger.error('Failed to update embedding:', err.message));
+        }
+      }).catch(err => logger.warn('Embedding regeneration error:', err.message));
     }
 
+    const dataToUpdate = { ...validUpdates, updated_at: new Date().toISOString() };
+    const keys = Object.keys(dataToUpdate);
+    const setFragments = keys.map((k, i) => `"${k}" = $${i + 2}`); // $1 is id
+    const values = [id, ...keys.map(k => dataToUpdate[k])];
+
+    const [updatedProduct] = await sql(`
+      UPDATE products 
+      SET ${setFragments.join(', ')}
+      WHERE id = $1 
+      RETURNING *
+    `, values);
+    return updatedProduct;
+  } catch (error) {
     throw new Error(`Failed to update product: ${error.message}`);
   }
-
-  return data;
 };
 
 export const deleteProduct = async (id) => {
-  const { data: product, error: fetchError } = await supabaseAdmin
-    .from('products')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (fetchError || !product) {
-    throw new NotFoundError('Product not found');
-  }
-
-  const { data: colorCombos } = await supabaseAdmin
-    .from('color_combos')
-    .select('id, product_ids')
-    .contains('product_ids', [id]);
-
-  if (colorCombos && colorCombos.length > 0) {
-    for (const combo of colorCombos) {
-      const updatedProductIds = combo.product_ids.filter(pid => pid !== id);
-      await supabaseAdmin
-        .from('color_combos')
-        .update({ product_ids: updatedProductIds })
-        .eq('id', combo.id);
-    }
-  }
-
-  const { data: reels } = await supabaseAdmin
-    .from('reels')
-    .select('id, product_ids')
-    .contains('product_ids', [id]);
-
-  if (reels && reels.length > 0) {
-    for (const reel of reels) {
-      if (reel.product_ids && reel.product_ids.length > 0) {
-        const updatedProductIds = reel.product_ids.filter(pid => pid !== id);
-        await supabaseAdmin
-          .from('reels')
-          .update({ product_ids: updatedProductIds })
-          .eq('id', reel.id);
-      }
-    }
-  }
+  const [product] = await sql('SELECT images FROM products WHERE id = $1', [id]);
+  if (!product) throw new NotFoundError('Product not found');
 
   if (product.images && product.images.length > 0) {
     const { deleteMultipleProductImages } = await import('./upload.service.js');
     await deleteMultipleProductImages(product.images);
   }
 
-  const { data: deletedRow, error: deleteError } = await supabaseAdmin
-    .from('products')
-    .delete()
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (deleteError) {
-    throw new Error(`Failed to delete product: ${deleteError.message}`);
-  }
-
-  if (!deletedRow) {
-    throw new Error('Failed to delete product: no rows deleted');
-  }
+  const [deleted] = await sql('DELETE FROM products WHERE id = $1 RETURNING id', [id]);
+  if (!deleted) throw new Error('Failed to delete product');
 
   return true;
 };
 
-
 export const getColorVariants = async (id) => {
-  // 1. Fetch the source product to get its metadata
-  const { data: product, error: productError } = await supabaseAdmin
-    .from('products')
-    .select('name, brand, subcategory, category')
-    .eq('id', id)
-    .single();
+  const [product] = await sql('SELECT name, brand, subcategory, category FROM products WHERE id = $1', [id]);
+  if (!product) throw new NotFoundError('Product not found');
 
-  if (productError || !product) {
-    throw new NotFoundError('Product not found');
-  }
-
-  // 2. Find other products with same Brand, Subcategory, and Name
-  // We use ilike for name to be case-insensitive
-  let query = supabaseAdmin
-    .from('products')
-    .select('id, name, price, brand, images, color, category, subcategory')
-    .eq('brand', product.brand)
-    .ilike('name', product.name) // Heuristic: Same name = variant
-    .neq('id', id); // Exclude current product
-
-  // Optional: strict subcategory match if it exists
-  if (product.subcategory) {
-    query = query.eq('subcategory', product.subcategory);
-  } else {
-    query = query.eq('category', product.category);
-  }
-
-  const { data, error } = await query.limit(10); // Limit to avoid massive lists
-
-  if (error) {
-    return [];
-  }
-
-  return data;
+  return await sql(
+    `SELECT id, name, price, brand, images, color, category, subcategory
+    FROM products
+    WHERE brand = $1
+    AND name ILIKE $2
+    AND id != $3
+    AND (
+      ($4::text IS NOT NULL AND subcategory = $4) OR
+      ($4::text IS NULL AND category = $5)
+    )
+    LIMIT 10`,
+    [product.brand, product.name, id, product.subcategory, product.category]
+  );
 };
 
 export const getRecommendedFromSubcategory = async (id) => {
-  // 1. Fetch the source product to get its subcategory
-  const { data: product, error: productError } = await supabaseAdmin
-    .from('products')
-    .select('subcategory, category')
-    .eq('id', id)
-    .single();
+  const [product] = await sql('SELECT subcategory, category FROM products WHERE id = $1', [id]);
+  if (!product) throw new NotFoundError('Product not found');
 
-  if (productError || !product) {
-    throw new NotFoundError('Product not found');
-  }
-
-  // 2. Find other products from the same subcategory
-  let query = supabaseAdmin
-    .from('products')
-    .select('id, name, price, brand, images, color, category, subcategory, affiliate_link, popularity')
-    .neq('id', id)
-    .order('popularity', { ascending: false })
-    .limit(12);
-
-  // If subcategory exists, filter by it; otherwise use category
-  if (product.subcategory) {
-    query = query.eq('subcategory', product.subcategory);
-  } else {
-    query = query.eq('category', product.category);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    return [];
-  }
-
-  return data;
+  return await sql(
+    `SELECT id, name, price, brand, images, color, category, subcategory, affiliate_link, popularity
+    FROM products
+    WHERE id != $1
+    AND (
+       ($2::text IS NOT NULL AND subcategory = $2) OR
+       ($2::text IS NULL AND category = $3)
+    )
+    ORDER BY popularity DESC
+    LIMIT 12`,
+    [id, product.subcategory, product.category]
+  );
 };

@@ -1,25 +1,26 @@
 import { z } from 'zod';
-import { VIDEO_CATEGORIES } from '../config/constants.js';
 
+// Raw schema for service-level validation
+export const reelDataSchema = z.object({
+  category: z.string().min(1, 'Category is required'),
+  product_ids: z.array(z.string().uuid()).default([]),
+  video_url: z.string().url().optional(),
+  thumbnail_url: z.string().url().optional()
+});
+
+// Kept for backward compatibility in services
+export const reelSchema = reelDataSchema;
+
+// Wrapped schemas for middleware validation
 export const createReelSchema = z.object({
-  body: z.object({
-    category: z.enum(VIDEO_CATEGORIES, { errorMap: () => ({ message: 'Invalid category' }) }),
-    video_url: z.string().url('Video URL must be valid'),
-    thumbnail_url: z.string().url('Thumbnail URL must be valid'),
-    product_ids: z.array(z.string().uuid()).default([])
-  })
+  body: reelDataSchema
 });
 
 export const updateReelSchema = z.object({
   params: z.object({
     id: z.string().uuid()
   }),
-  body: z.object({
-    category: z.enum(VIDEO_CATEGORIES).optional(),
-    video_url: z.string().url().optional(),
-    thumbnail_url: z.string().url().optional(),
-    product_ids: z.array(z.string().uuid()).optional()
-  })
+  body: reelDataSchema.partial()
 });
 
 export const reelIdSchema = z.object({
@@ -30,7 +31,6 @@ export const reelIdSchema = z.object({
 
 export const categorySchema = z.object({
   params: z.object({
-    category: z.enum(VIDEO_CATEGORIES, { errorMap: () => ({ message: 'Invalid category' }) })
+    category: z.string().min(1)
   })
 });
-

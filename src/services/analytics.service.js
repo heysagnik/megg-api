@@ -1,31 +1,33 @@
-import { supabaseAdmin } from '../config/supabase.js';
+import { sql } from '../config/neon.js';
 
 export const getOverviewAnalytics = async () => {
-  const [usersResult, productsResult, clicksResult] = await Promise.all([
-    supabaseAdmin.from('users').select('id', { count: 'exact', head: true }),
-    supabaseAdmin.from('products').select('id', { count: 'exact', head: true }),
-    supabaseAdmin.from('products').select('clicks')
+
+  const [
+    [{ count: usersCount }],
+    [{ count: productsCount }],
+    [{ total_clicks }]
+  ] = await Promise.all([
+    sql('SELECT COUNT(*)::int FROM "user"'),
+    sql('SELECT COUNT(*)::int FROM products'),
+    sql('SELECT SUM(clicks)::int as total_clicks FROM products')
   ]);
 
-  const totalClicks = clicksResult.data?.reduce((sum, product) => sum + (product.clicks || 0), 0) || 0;
-
   return {
-    total_users: usersResult.count || 0,
-    total_products: productsResult.count || 0,
-    total_clicks: totalClicks
+    total_users: usersCount || 0,
+    total_products: productsCount || 0,
+    total_clicks: total_clicks || 0
   };
 };
 
 export const getTrendingAnalytics = async () => {
-  const { data: products, error } = await supabaseAdmin
-    .from('products')
-    .select('id, name, brand, category, clicks, popularity, created_at')
-    .order('clicks', { ascending: false })
-    .limit(20);
+  const products = await sql(
+    `SELECT id, name, brand, category, clicks, popularity, created_at
+         FROM products
+         ORDER BY clicks DESC
+         LIMIT 20`
+  );
 
-  if (error || !products) {
-    return [];
-  }
+  if (!products) return [];
 
   return products.map(product => ({
     product_id: product.id,
@@ -41,20 +43,24 @@ export const getTrendingAnalytics = async () => {
   }));
 };
 
-export const getClickAnalytics = async ({ start_date, end_date, product_id }) => {
-  let query = supabaseAdmin
-    .from('products')
-    .select('id, name, brand, category, clicks, created_at, updated_at');
+export const getClickAnalytics = async ({ product_id }) => {
+  const conditions = [];
+  const values = [];
 
   if (product_id) {
-    query = query.eq('id', product_id);
+    conditions.push('id = $1');
+    values.push(product_id);
   }
 
-  const { data: products, error } = await query.order('clicks', { ascending: false });
-
-  if (error) {
-    throw new Error('Failed to fetch click analytics');
+  let query = 'SELECT id, name, brand, category, clicks, created_at, updated_at FROM products';
+  if (conditions.length > 0) {
+    query += ` WHERE ${conditions.join(' AND ')}`;
   }
+  query += ' ORDER BY clicks DESC';
+
+  const products = await sql(query, values);
+
+  if (!products) throw new Error('Failed to fetch click analytics');
 
   const totalClicks = products.reduce((sum, p) => sum + (p.clicks || 0), 0);
 
@@ -70,4 +76,3 @@ export const getClickAnalytics = async ({ start_date, end_date, product_id }) =>
     }))
   };
 };
-

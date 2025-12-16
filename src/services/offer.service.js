@@ -1,46 +1,38 @@
-import { supabaseAdmin } from '../config/supabase.js';
-import { NotFoundError } from '../utils/errors.js';
+import { sql } from '../config/neon.js';
+import { NotFoundError, ValidationError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
+import { uploadOfferBanner, deleteOfferBanner } from './upload.service.js';
+import { offerSchema } from '../validators/offer.validators.js';
 
 export const listOffers = async ({ page, limit }) => {
-  const offset = (page - 1) * limit;
+  const p = Number(page) || 1;
+  const l = Number(limit) || 20;
+  const offset = (p - 1) * l;
 
-  const { data, error, count } = await supabaseAdmin
-    .from('offers')
-    .select('id, title, banner_image, affiliate_link', { count: 'exact' })
-    .range(offset, offset + limit - 1)
-    .order('created_at', { ascending: false });
+  const [offers, countResult] = await Promise.all([
+    sql('SELECT id, title, banner_image, affiliate_link FROM offers ORDER BY created_at DESC LIMIT $1 OFFSET $2', [l, offset]),
+    sql('SELECT COUNT(*)::int FROM offers')
+  ]);
 
-  if (error) {
-    throw new Error('Failed to fetch offers');
-  }
-
-  const minimal = (data || []).map(o => ({
-    id: o.id,
-    name: o.title,
-    banner_image: o.banner_image,
-    affiliate_link: o.affiliate_link || null
-  }));
+  const count = countResult[0]?.count || 0;
 
   return {
-    offers: minimal,
+    offers: (offers || []).map(o => ({
+      id: o.id,
+      name: o.title,
+      banner_image: o.banner_image,
+      affiliate_link: o.affiliate_link || null
+    })),
     total: count,
-    page,
-    limit,
-    totalPages: Math.ceil(count / limit)
+    page: p,
+    limit: l,
+    totalPages: Math.ceil(count / l)
   };
 };
 
 export const getOfferById = async (id) => {
-  const { data, error } = await supabaseAdmin
-    .from('offers')
-    .select('id, title, banner_image, affiliate_link')
-    .eq('id', id)
-    .single();
-
-  if (error || !data) {
-    throw new NotFoundError('Offer not found');
-  }
+  const [data] = await sql('SELECT id, title, banner_image, affiliate_link FROM offers WHERE id = $1 LIMIT 1', [id]);
+  if (!data) throw new NotFoundError('Offer not found');
 
   return {
     id: data.id,
@@ -51,68 +43,53 @@ export const getOfferById = async (id) => {
 };
 
 export const createOffer = async (offerData) => {
-  const { data, error } = await supabaseAdmin
-    .from('offers')
-    .insert(offerData)
-    .select()
-    .single();
+  const validation = offerSchema.safeParse(offerData);
+  if (!validation.success) throw new ValidationError(validation.error.errors[0].message);
 
-  if (error) {
-    throw new Error('Failed to create offer');
-  }
+  const validData = validation.data;
+  const keys = Object.keys(validData);
+  const cols = keys.map(k => `"${k}"`).join(', ');
+  const vals = keys.map((_, i) => `$${i + 1}`).join(', ');
+  const values = keys.map(k => validData[k]);
 
-  return data;
+  const [offer] = await sql(
+    `INSERT INTO offers (${cols}) VALUES (${vals}) RETURNING *`,
+    values
+  );
+
+  if (!offer) throw new Error('Failed to create offer');
+  return offer;
 };
 
 export const updateOffer = async (id, updates) => {
-  // Fetch existing offer to check for image changes
-  const { data: existingOffer } = await supabaseAdmin
-    .from('offers')
-    .select('banner_image')
-    .eq('id', id)
-    .single();
+  const validation = offerSchema.partial().safeParse(updates);
+  if (!validation.success) throw new ValidationError(validation.error.errors[0].message);
 
-  if (existingOffer && updates.banner_image && existingOffer.banner_image !== updates.banner_image) {
-    const { deleteOfferBanner } = await import('./upload.service.js');
-    await deleteOfferBanner(existingOffer.banner_image).catch(err => logger.error(`Failed to delete old offer banner: ${err.message}`));
+  const [existingOffer] = await sql('SELECT banner_image FROM offers WHERE id = $1 LIMIT 1', [id]);
+  if (!existingOffer) throw new NotFoundError('Offer not found');
+
+  if (updates.banner_image && existingOffer.banner_image !== updates.banner_image) {
+    // Delete old banner if image is updated
+    await deleteOfferBanner(existingOffer.banner_image).catch(err => logger.error(`Failed to delete old banner: ${err.message}`));
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('offers')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .select()
-    .single();
+  const validUpdates = { ...validation.data, updated_at: new Date().toISOString() };
+  const keys = Object.keys(validUpdates);
+  const setFragments = keys.map((k, i) => `"${k}" = $${i + 2}`);
+  const values = [id, ...keys.map(k => validUpdates[k])];
 
-  if (error) {
-    throw new Error('Failed to update offer');
-  }
+  const [updated] = await sql(
+    `UPDATE offers SET ${setFragments.join(', ')} WHERE id = $1 RETURNING *`,
+    values
+  );
 
-  return data;
+  if (!updated) throw new Error('Failed to update offer');
+  return updated;
 };
 
 export const deleteOffer = async (id) => {
-  // Fetch offer first to get image URL
-  const { data: offer } = await supabaseAdmin
-    .from('offers')
-    .select('banner_image')
-    .eq('id', id)
-    .single();
-
-  if (offer && offer.banner_image) {
-    const { deleteOfferBanner } = await import('./upload.service.js');
-    await deleteOfferBanner(offer.banner_image);
-  }
-
-  const { error } = await supabaseAdmin
-    .from('offers')
-    .delete()
-    .eq('id', id);
-
-  if (error) {
-    throw new Error('Failed to delete offer');
-  }
-
+  const [offer] = await sql('SELECT banner_image FROM offers WHERE id = $1 LIMIT 1', [id]);
+  if (offer?.banner_image) await deleteOfferBanner(offer.banner_image);
+  await sql('DELETE FROM offers WHERE id = $1', [id]);
   return true;
 };
-

@@ -1,30 +1,24 @@
 import { z } from 'zod';
-import { PAGINATION } from '../config/constants.js';
 
-export const listOffersSchema = z.object({
-  query: z.object({
-    page: z.coerce.number().int().positive().default(1),
-    limit: z.coerce.number().int().positive().max(PAGINATION.MAX_LIMIT).default(PAGINATION.DEFAULT_LIMIT)
-  })
+// Raw schema for service-level validation
+export const offerDataSchema = z.object({
+  title: z.string().min(1, 'Title is required'),
+  affiliate_link: z.string().url('Invalid link').optional().or(z.literal(''))
 });
 
+// Kept for backward compatibility in services
+export const offerSchema = offerDataSchema;
+
+// Wrapped schemas for middleware validation
 export const createOfferSchema = z.object({
-  body: z.object({
-    title: z.string().min(1, 'Title is required'),
-    banner_image: z.string().url('Banner image must be a valid URL').optional(),
-    affiliate_link: z.string().url().optional()
-  })
+  body: offerDataSchema
 });
 
 export const updateOfferSchema = z.object({
   params: z.object({
     id: z.string().uuid()
   }),
-  body: z.object({
-    title: z.string().min(1).optional(),
-    banner_image: z.string().url().optional(),
-    affiliate_link: z.string().url().optional()
-  })
+  body: offerDataSchema.partial()
 });
 
 export const offerIdSchema = z.object({
@@ -33,3 +27,9 @@ export const offerIdSchema = z.object({
   })
 });
 
+export const listOffersSchema = z.object({
+  query: z.object({
+    page: z.coerce.number().int().min(1).optional(),
+    limit: z.coerce.number().int().min(1).optional()
+  }).optional()
+});

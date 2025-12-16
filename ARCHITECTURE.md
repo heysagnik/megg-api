@@ -1,189 +1,185 @@
-# megg-api Architecture
+# MEGG API - System Architecture
 
-## System Overview
+> **Version**: 2.1.0 (Hybrid Edge/Serverless + Semantic Search)
+> **Status**: Production Ready
+> **Pattern**: Global Edge Gateway with Serverless Origin + pgvector AI Search
 
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              CLIENTS                                        │
-│                    ┌──────────────┐  ┌──────────────┐                       │
-│                    │  Mobile App  │  │ Web Admin    │                       │
-│                    └──────┬───────┘  └──────┬───────┘                       │
-└─────────────────────────────────────────────────────────────────────────────┘
-                            │                  │
-                            ▼                  ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         EDGE LAYER                                          │
-│                 ┌─────────────────────────────┐                             │
-│                 │   Cloudflare Worker         │                             │
-│                 │   api.megg.workers.dev      │                             │
-│                 │   (Edge Cache + CDN)        │                             │
-│                 └──────────────┬──────────────┘                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                 │
-                                 ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         COMPUTE LAYER                                       │
-│                 ┌─────────────────────────────┐                             │
-│                 │   Vercel Serverless         │                             │
-│                 │   megg-api.vercel.app       │                             │
-│                 │   (Express.js API)          │                             │
-│                 └──────────────┬──────────────┘                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                 │
-          ┌──────────────────────┼──────────────────────┐
-          ▼                      ▼                      ▼
-┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
-│  Upstash Redis   │  │    Supabase      │  │   Cloudinary     │
-│  (App Cache)     │  │   (PostgreSQL)   │  │  (Media Storage) │
-└──────────────────┘  └──────────────────┘  └──────────────────┘
+## 1. Executive Summary
+
+The MEGG API utilizes a high-performance **Hybrid Edge Architecture** designed for maximizing cache hit rates, minimizing latency, and reducing infrastructure costs. It leverages **Cloudflare Workers** as a global intelligent gateway that handles 90% of read traffic, with **Vercel Serverless Functions** providing the computational power for complex write/search operations. Data persistence is managed by **Neon (Serverless Postgres)** and **Cloudflare R2** (Object Storage).
+
+**New in v2.1**: Semantic Search powered by **pgvector** + **Cloudflare Workers AI** for intelligent product discovery.
+
+---
+
+## 2. System Context
+
+```mermaid
+graph TD
+    User[Mobile/Web Client] -->|HTTPS/443| CF[Cloudflare Network]
+    
+    subgraph "Edge Layer (Cloudflare)"
+        CF -->|Route: /api/*| Worker[Edge Worker (Hono)]
+        Worker -->|Check Cache| KV[Cloudflare KV]
+        Worker -->|Generate Embedding| AI[Workers AI (bge-small-en)]
+    end
+    
+    subgraph "Data Layer (Neon)"
+        Worker -->|Auth/Read| Neon[Neon Postgres (Serverless)]
+        Neon -->|pgvector| Vector[Vector Similarity Search]
+        Neon -->|tsvector| FTS[Full-Text Search]
+    end
+    
+    subgraph "Compute Origin (Vercel)"
+        Worker -->|Proxy: Search/Write| Vercel[Vercel Serverless API]
+        Vercel -->|Write| Neon
+        Vercel -->|Process & Upload| R2[Cloudflare R2]
+    end
 ```
 
 ---
 
-## Directory Structure
+## 3. Component Architecture
 
-```
-megg-api/
-├── src/
-│   ├── config/           # External service configs
-│   │   ├── supabase.js   # Database client
-│   │   ├── cloudinary.js # Media storage
-│   │   ├── firebase.js   # Push notifications
-│   │   └── constants.js  # App constants & enums
-│   │
-│   ├── controllers/      # Request handlers (14 files)
-│   ├── services/         # Business logic (14 files)
-│   ├── routes/           # API endpoints (15 files)
-│   │
-│   ├── middleware/
-│   │   ├── auth.js       # JWT authentication
-│   │   ├── rateLimiter.js
-│   │   ├── upload.js     # Multer config
-│   │   └── validate.js   # Zod validation
-│   │
-│   ├── utils/
-│   │   ├── cache.js      # Upstash Redis
-│   │   ├── cloudinary.js # URL transformations
-│   │   └── errors.js     # Custom errors
-│   │
-│   └── index.js          # Express app entry
-│
-├── cloudflare-worker/    # Edge cache layer
-│   ├── src/index.js
-│   └── wrangler.toml
-│
-└── schema.sql            # Database schema
-```
+### 3.1 Edge Gateway (Cloudflare Workers)
+**Role**: The primary entry point. Handles routing, authentication, caching, and embedding generation.
+- **Tech Stack**: Hono (Lightweight Web Framework), JavaScript.
+- **Responsibilities**:
+    - **Authentication**: Verifies Neon Auth session tokens directly against DB/Cache.
+    - **Embedding Generation**: Uses Workers AI (`@cf/baai/bge-small-en-v1.5`) to generate query embeddings for semantic search.
+    - **Caching Policy**: Implemented using Cloudflare KV.
+        - `TTL: 15m` (Default)
+        - `TTL: 5m` (Trending)
+        - `TTL: 24h` (Query Embeddings)
+    - **Direct DB Access**: Uses `@neondatabase/serverless` for low-latency queries over HTTP.
+    - **Proxying**: Routes complex requests to Vercel origin.
 
----
+### 3.2 Compute Origin (Vercel)
+**Role**: Handling CPU-intensive tasks and write operations.
+- **Tech Stack**: Express.js, Node.js.
+- **Responsibilities**:
+    - **Hybrid Search Engine**: Combines pgvector similarity, full-text search, and popularity ranking.
+    - **Auto-Generation**: Automatically generates `semantic_tags` and `embedding` on product creation/update.
+    - **Image Processing**: Resizing and format conversion (Sharp) before uploading to R2.
+    - **Transactional Writes**: Complex update flows (e.g., creating outfits with multiple products).
 
-## API Endpoints
+### 3.3 Data Layer (Neon Postgres)
+**Role**: Single source of truth with AI-powered search.
+- **Tech Stack**: PostgreSQL 17 (Serverless) + pgvector extension.
+- **Schema**: Relational model with vector and JSONB extensions.
+- **Search Columns**:
+    - `search_vector`: tsvector for full-text search (auto-generated by trigger)
+    - `semantic_tags`: text[] for tag-based filtering
+    - `embedding`: vector(384) for AI semantic similarity
+- **Optimization**:
+    - `GIN` indexes for JSONB and search vectors.
+    - `B-tree` indexes on filter columns (category, color, brand).
+    - Exact vector search (no IVFFlat - faster for <2K products).
 
-| Route | Purpose | Auth | Cache TTL |
-|-------|---------|------|-----------|
-| `GET /api/products` | Product catalog | Optional | 60s |
-| `GET /api/products/:id` | Product details | Optional | 60s |
-| `GET /api/color-combos` | Color combinations | No | 30 min |
-| `GET /api/reels` | Video content | No | 5 min |
-| `GET /api/offers` | Promotional banners | No | 5 min |
-| `GET /api/trending` | Popular products | No | 5 min |
-| `GET /api/search` | Smart search | No | 60s |
-| `GET /api/wishlist` | User favorites | Required | None |
-| `POST /api/auth/*` | Authentication | No | None |
-| `* /api/admin/*` | Admin operations | Admin | None |
+### 3.4 Storage Layer (Cloudflare R2)
+**Role**: Immutable blob storage for media.
+- **Interface**: S3-compatible API.
+- **Optimization**:
+    - Zero egress fees.
+    - **Image Variants**: Stores `thumb`, `medium`, `large` WebP versions.
+    - **CDN Integration**: Served directly via Cloudflare CDN.
 
 ---
 
-## Data Flow
+## 4. Semantic Search Architecture
+
+### 4.1 Hybrid Search Algorithm
+The search combines three signals with weighted scoring:
 
 ```
-Request Flow:
-═════════════
-
-1. Client Request
-       │
-       ▼
-2. Cloudflare Worker (Edge Cache)
-       │
-       ├── Cache HIT → Return immediately (10-50ms)
-       │
-       └── Cache MISS
-              │
-              ▼
-3. Vercel Serverless Function
-       │
-       ▼
-4. Redis Cache Check (Upstash)
-       │
-       ├── Cache HIT → Return data
-       │
-       └── Cache MISS
-              │
-              ▼
-5. Database Query (Supabase)
-       │
-       ▼
-6. Response + Cache Update
+Combined Score = (0.5 × Vector Similarity) + (0.3 × Text Match) + (0.2 × Popularity)
 ```
 
----
+| Signal | Source | Weight |
+|--------|--------|--------|
+| Vector Similarity | pgvector cosine distance | 50% |
+| Text Match | tsvector + semantic_tags | 30% |
+| Popularity | Product clicks/views | 20% |
 
-## Database Tables
+### 4.2 Search Flow
 
-| Table | Purpose | Key Fields |
-|-------|---------|------------|
-| `products` | Product catalog | id, name, price, brand, images[], category |
-| `reels` | Video content | id, video_url, thumbnail_url, views, likes |
-| `color_combos` | Color pairings | id, name, color_a, color_b, product_ids[] |
-| `users` | User profiles | id, full_name, avatar_url |
-| `wishlist` | Saved products | user_id, product_id |
-| `trending_clicks` | Click tracking | product_id, clicked_at |
-| `offers` | Promotional banners | id, title, banner_image, affiliate_link |
-| `category_banners` | Category headers | category, banner_image |
-
----
-
-## Caching Strategy
-
-| Layer | Technology | TTL | Purpose |
-|-------|------------|-----|---------|
-| Edge | Cloudflare Workers | 1-30 min | Global latency (10-50ms) |
-| App | Upstash Redis | 5-30 min | Reduce DB queries |
-| CDN | Vercel Edge | 60s | HTTP response caching |
-
----
-
-## Authentication
-
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant W as Cloudflare Worker
+    participant AI as Workers AI
+    participant N as Neon Postgres
+    
+    U->>W: GET /api/search?query=blue running shoes
+    W->>W: Check KV cache
+    alt Cache Miss
+        W->>AI: Generate embedding (bge-small-en)
+        AI-->>W: [0.023, -0.045, ...]
+        W->>W: Cache embedding (24h TTL)
+    end
+    W->>N: Hybrid SQL (vector + text + filters)
+    N-->>W: Ranked products
+    W->>W: Cache results (15m TTL)
+    W-->>U: JSON response
 ```
-Auth Flow:
-══════════
-User → Google OAuth → Supabase Auth → JWT Token
-                                          │
-                                          ▼
-                           ┌──────────────────────────┐
-                           │  Bearer Token in Header  │
-                           └──────────────────────────┘
-                                          │
-                                          ▼
-                           ┌──────────────────────────┐
-                           │  Middleware Verification │
-                           │  • authenticate          │
-                           │  • optionalAuth          │
-                           │  • requireAdmin          │
-                           └──────────────────────────┘
+
+### 4.3 Auto-Generation on Product Create/Update
+
+When a product is created or updated, the system automatically generates:
+
+| Field | Method | Timing |
+|-------|--------|--------|
+| `search_vector` | PostgreSQL trigger | Immediate (sync) |
+| `semantic_tags` | Based on category, color, brand, price | Immediate (sync) |
+| `embedding` | Cloudflare Workers AI API | Async (fire-and-forget) |
+
+**Environment Variables Required**:
+```env
+CF_ACCOUNT_ID=your_cloudflare_account_id
+CF_API_TOKEN=your_cloudflare_api_token
 ```
 
 ---
 
-## Technology Stack
+## 5. Key Design Decisions
 
-| Component | Technology | Free Tier Limit |
-|-----------|------------|-----------------|
-| API Hosting | Vercel | 100 GB bandwidth |
-| Database | Supabase PostgreSQL | 500 MB storage, 2 GB bandwidth |
-| App Cache | Upstash Redis | 10K requests/day |
-| Edge Cache | Cloudflare Workers | 100K requests/day |
-| Media Storage | Cloudinary | 25 credits/month |
-| Push Notifications | Firebase FCM | Unlimited |
-| Auth | Supabase Auth | 50K MAU |
+### 5.1 "Split Brain" Routing
+By separating Reads (Workers) from Writes (Vercel), we achieve:
+1. **Cost Efficiency**: 90% of traffic (reads) hits the cheaper/free Workers platform.
+2. **Performance**: Reads happen at the edge (close to user).
+3. **Complexity Isolation**: Complex transactional logic stays in the mature Express environment.
+
+### 5.2 Exact Vector Search (No ANN Index)
+For product catalogs under 2,000 items, exact vector search is faster than ANN indexes:
+- No index maintenance overhead
+- 100% recall (perfect accuracy)
+- Lower memory footprint
+
+### 5.3 Edge Embedding Generation
+Generating query embeddings at the edge (Cloudflare Workers) provides:
+- Sub-50ms embedding generation globally
+- 24-hour caching of query embeddings
+- Free tier eligible (10K requests/day)
+
+---
+
+## 6. Security & Scalability
+
+- **Input Validation**: Edge Worker validates UUIDs and param limits before logic execution.
+- **Database Connection**: Uses Connection Pooling/HTTP-proxy in Neon driver.
+- **DDoS Protection**: Inherited from Cloudflare (WAF).
+- **Rate Limiting**: Implemented for Auth/Write endpoints.
+- **Minimum Query Length**: 3 characters required for embedding generation.
+
+---
+
+## 7. Migration Status
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| **Database** | ✅ Complete | Neon PostgreSQL 17 |
+| **Auth** | ✅ Complete | Neon Auth |
+| **Media** | ✅ Complete | Cloudflare R2 |
+| **API** | ✅ Complete | Cloudflare Worker + Vercel |
+| **Semantic Search** | ✅ Complete | pgvector + Workers AI |
+| **Auto-Generation** | ✅ Complete | Built into product service |

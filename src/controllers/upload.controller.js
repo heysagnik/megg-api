@@ -9,9 +9,12 @@ export const uploadReelVideo = async (req, res, next) => {
       });
     }
 
+    const { reelId } = req.body;
+
+    // Pass the file object (with buffer) directly as service expects file.buffer/file.size
     const result = await uploadService.uploadReelVideo(
-      req.file.buffer,
-      req.file.originalname
+      req.file,
+      reelId
     );
 
     res.status(201).json({
@@ -33,10 +36,11 @@ export const uploadImage = async (req, res, next) => {
       });
     }
 
+    const { productId } = req.body;
+    // Service expects (file, productId, index). File object needs buffer.
     const url = await uploadService.uploadProductImage(
-      req.file.buffer,
-      req.file.originalname,
-      req.file.mimetype
+      req.file,
+      productId || 'temp' // fallback if productId not mandatory but usually is
     );
 
     res.status(201).json({

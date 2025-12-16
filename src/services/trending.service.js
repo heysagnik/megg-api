@@ -1,26 +1,23 @@
-import { supabaseAdmin } from '../config/supabase.js';
+import { sql } from '../config/neon.js';
 
 export const trackProductClick = async (productId, userId = null) => {
-  await supabaseAdmin
-    .from('trending_clicks')
-    .insert({
-      product_id: productId,
-      user_id: userId
-    });
-
+  await sql(
+    'INSERT INTO trending_clicks (product_id, user_id) VALUES ($1, $2)',
+    [productId, userId]
+  );
   return true;
 };
 
 export const getTrendingProducts = async (limit = 10) => {
-  const { data: products, error } = await supabaseAdmin
-    .from('products')
-    .select('id, name, price, brand, images, category, subcategory, color, affiliate_link, clicks, popularity, updated_at')
-    .order('clicks', { ascending: false })
-    .limit(limit);
+  const products = await sql(
+    `SELECT id, name, price, brand, images, category, subcategory, color, affiliate_link, clicks, popularity, updated_at
+     FROM products
+     ORDER BY clicks DESC
+     LIMIT $1`,
+    [limit]
+  );
 
-  if (error || !products) {
-    return [];
-  }
+  if (!products) return [];
 
   return products.map(product => ({
     ...product,
@@ -28,4 +25,3 @@ export const getTrendingProducts = async (limit = 10) => {
     last_clicked: product.updated_at
   }));
 };
-

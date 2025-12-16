@@ -1,161 +1,104 @@
-import { supabaseAdmin } from '../config/supabase.js';
-import { NotFoundError } from '../utils/errors.js';
+import { sql } from '../config/neon.js';
+import { NotFoundError, ValidationError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 import { getCached, invalidateCacheByPrefix, CACHE_TTL } from '../utils/cache.js';
+import { deleteProductImage } from './upload.service.js';
+import { colorComboSchema } from '../validators/colorCombo.validators.js';
 
 export const listColorCombos = async (groupType = null) => {
   const cacheKey = `color_combos:${groupType || 'all'}`;
 
   return getCached(cacheKey, CACHE_TTL.COLOR_COMBOS, async () => {
-    let query = supabaseAdmin
-      .from('color_combos')
-      .select('id, name, model_image, product_ids, color_a, color_b, group_type, created_at');
-
+    let query = 'SELECT id, name, model_image, product_ids, color_a, color_b, group_type, created_at FROM color_combos';
+    const values = [];
     if (groupType) {
-      query = query.eq('group_type', groupType);
+      query += ' WHERE group_type = $1';
+      values.push(groupType);
     }
+    query += ' ORDER BY name ASC';
 
-    const { data, error } = await query.order('name', { ascending: true });
-
-    if (error) {
-      throw new Error('Failed to fetch color combos');
-    }
-
-    return data;
+    const data = await sql(query, values);
+    return data || [];
   });
 };
 
 export const getColorComboProducts = async (id) => {
-  const { data: combo, error: comboError } = await supabaseAdmin
-    .from('color_combos')
-    .select('id, name, model_image, product_ids, color_a, color_b, group_type, created_at')
-    .eq('id', id)
-    .single();
+  const [combo] = await sql('SELECT * FROM color_combos WHERE id = $1 LIMIT 1', [id]);
+  if (!combo) throw new NotFoundError('Color combo not found');
 
-  if (comboError || !combo) {
-    throw new NotFoundError('Color combo not found');
-  }
-
-  if (combo.product_ids && combo.product_ids.length > 0) {
-    const { data: products } = await supabaseAdmin
-      .from('products')
-      .select('id, name, price, brand, images, category, color, affiliate_link')
-      .in('id', combo.product_ids);
-
+  if (combo.product_ids?.length > 0) {
+    const products = await sql(
+      'SELECT id, name, price, brand, images, category, color, affiliate_link FROM products WHERE id = ANY($1)',
+      [combo.product_ids]
+    );
     return { combo, products: products || [] };
   }
-
   return { combo, products: [] };
 };
 
 export const createColorCombo = async (comboData) => {
-  const { data, error } = await supabaseAdmin
-    .from('color_combos')
-    .insert(comboData)
-    .select()
-    .single();
+  const validation = colorComboSchema.safeParse(comboData);
+  if (!validation.success) throw new ValidationError(validation.error.errors[0].message);
 
-  if (error) {
-    throw new Error('Failed to create color combo');
-  }
+  const validData = validation.data;
+  const keys = Object.keys(validData);
+  const cols = keys.map(k => `"${k}"`).join(', ');
+  const vals = keys.map((_, i) => `$${i + 1}`).join(', ');
+  const values = keys.map(k => validData[k]);
 
-  // Invalidate cache on create
+  const [combo] = await sql(
+    `INSERT INTO color_combos (${cols}) VALUES (${vals}) RETURNING *`,
+    values
+  );
+
+  if (!combo) throw new Error('Failed to create color combo');
   await invalidateCacheByPrefix('color_combos:');
-
-  return data;
+  return combo;
 };
 
 export const updateColorCombo = async (id, updates) => {
-  // Fetch existing combo to check for image changes
-  const { data: existingCombo } = await supabaseAdmin
-    .from('color_combos')
-    .select('model_image')
-    .eq('id', id)
-    .single();
+  const validation = colorComboSchema.partial().safeParse(updates);
+  if (!validation.success) throw new ValidationError(validation.error.errors[0].message);
+
+  const [existingCombo] = await sql('SELECT model_image FROM color_combos WHERE id = $1 LIMIT 1', [id]);
 
   if (existingCombo && updates.model_image && existingCombo.model_image !== updates.model_image) {
-    const { deleteProductImage } = await import('./upload.service.js');
-    await deleteProductImage(existingCombo.model_image).catch(err => logger.error(`Failed to delete old color combo image: ${err.message}`));
+    await deleteProductImage(existingCombo.model_image).catch(e => logger.error(e.message));
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('color_combos')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .select()
-    .single();
+  const validUpdates = { ...validation.data, updated_at: new Date().toISOString() };
+  const keys = Object.keys(validUpdates);
+  const setFragments = keys.map((k, i) => `"${k}" = $${i + 2}`);
+  const values = [id, ...keys.map(k => validUpdates[k])];
 
-  if (error) {
-    throw new Error('Failed to update color combo');
-  }
+  const [updated] = await sql(
+    `UPDATE color_combos SET ${setFragments.join(', ')} WHERE id = $1 RETURNING *`,
+    values
+  );
 
-  // Invalidate cache on update
+  if (!updated) throw new Error('Failed to update color combo');
   await invalidateCacheByPrefix('color_combos:');
-
-  return data;
+  return updated;
 };
 
 export const deleteColorCombo = async (id) => {
-  // Fetch combo first to get image URL
-  const { data: combo } = await supabaseAdmin
-    .from('color_combos')
-    .select('model_image')
-    .eq('id', id)
-    .single();
-
-  if (combo && combo.model_image) {
-    const { deleteProductImage } = await import('./upload.service.js');
-    await deleteProductImage(combo.model_image);
-  }
-
-  const { data, error } = await supabaseAdmin
-    .from('color_combos')
-    .delete()
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error) {
-    throw new Error('Failed to delete color combo');
-  }
-
-  // Invalidate cache on delete
+  const [combo] = await sql('SELECT model_image FROM color_combos WHERE id = $1 LIMIT 1', [id]);
+  if (combo?.model_image) await deleteProductImage(combo.model_image);
+  await sql('DELETE FROM color_combos WHERE id = $1', [id]);
   await invalidateCacheByPrefix('color_combos:');
-
   return true;
 };
 
 export const getRecommendedColorCombos = async (id) => {
-  // 1. Fetch the source color combo to get its group type
-  const { data: combo, error: comboError } = await supabaseAdmin
-    .from('color_combos')
-    .select('group_type')
-    .eq('id', id)
-    .single();
+  const [combo] = await sql('SELECT group_type FROM color_combos WHERE id = $1 LIMIT 1', [id]);
+  if (!combo) throw new NotFoundError('Color combo not found');
 
-  if (comboError || !combo) {
-    throw new NotFoundError('Color combo not found');
-  }
+  const query = 'SELECT * FROM color_combos WHERE id != $1';
+  const values = [id];
 
-  // 2. Find other color combos from the same group type
-  let query = supabaseAdmin
-    .from('color_combos')
-    .select('id, name, model_image, product_ids, color_a, color_b, group_type')
-    .neq('id', id)
-    .order('name', { ascending: true })
-    .limit(10);
-
-  // Filter by group type if it exists
   if (combo.group_type) {
-    query = query.eq('group_type', combo.group_type);
+    // Logic for recommendation by group
+    return await sql(query + ' AND group_type = $2 LIMIT 10', [id, combo.group_type]);
   }
-
-  const { data, error } = await query;
-
-  if (error) {
-    return [];
-  }
-
-  return data;
+  return await sql(query + ' LIMIT 10', values);
 };
-

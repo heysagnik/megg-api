@@ -1,143 +1,97 @@
-import { supabaseAdmin } from '../config/supabase.js';
-import { NotFoundError } from '../utils/errors.js';
-
-const uploadBannerImage = async (file, category) => {
-  const fileName = `${Date.now()}_${file.originalname.replace(/\s+/g, '_')}`;
-  const filePath = `${category}/${fileName}`;
-  
-  const { data, error } = await supabaseAdmin.storage
-    .from('offer-banners')
-    .upload(filePath, file.buffer, {
-      contentType: file.mimetype,
-      upsert: false
-    });
-  
-  if (error) {
-    throw new Error(`Failed to upload image: ${error.message}`);
-  }
-  
-  const { data: { publicUrl } } = supabaseAdmin.storage
-    .from('offer-banners')
-    .getPublicUrl(filePath);
-  
-  return publicUrl;
-};
-
-const deleteImageFromStorage = async (imageUrl, category) => {
-  try {
-    const urlParts = imageUrl.split('/');
-    const fileName = urlParts[urlParts.length - 1];
-    const filePath = `${category}/${fileName}`;
-    
-    await supabaseAdmin.storage
-      .from('offer-banners')
-      .remove([filePath]);
-  } catch (err) {
-    throw new Error(`Failed to delete image: ${err.message}`);
-  }
-};
+import { sql } from '../config/neon.js';
+import { NotFoundError, ValidationError } from '../utils/errors.js';
+import { uploadBannerImage, deleteProductImage } from './upload.service.js';
+import { bannerSchema, updateBannerSchema } from '../validators/banner.validators.js';
 
 export const listBanners = async (category = null) => {
-  let query = supabaseAdmin
-    .from('category_banners')
-    .select('*')
-    .order('display_order', { ascending: true });
+  const conditions = [];
+  const values = [];
 
   if (category) {
-    query = query.eq('category', category);
+    conditions.push('category = $1');
+    values.push(category);
   }
 
-  const { data, error } = await query;
+  const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-  if (error) {
-    throw new Error(`Failed to fetch banners: ${error.message}`);
-  }
+  const query = `
+    SELECT id, banner_image, link, display_order, category
+    FROM category_banners
+    ${whereClause}
+    ORDER BY display_order ASC
+  `;
 
+  const data = await sql(query, values);
   return data || [];
 };
 
 export const getBannerById = async (id) => {
-  const { data, error } = await supabaseAdmin
-    .from('category_banners')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (error || !data) {
-    throw new NotFoundError('Banner not found');
-  }
-
+  const [data] = await sql('SELECT * FROM category_banners WHERE id = $1 LIMIT 1', [id]);
+  if (!data) throw new NotFoundError('Banner not found');
   return data;
 };
 
 export const createBanner = async (bannerData, file) => {
-  if (!file) {
-    throw new Error('Banner image is required');
-  }
+  const validation = bannerSchema.safeParse(bannerData);
+  if (!validation.success) throw new ValidationError(validation.error.errors[0].message);
 
-  const imageUrl = await uploadBannerImage(file, bannerData.category);
+  if (!file) throw new Error('Banner image is required');
 
-  const { data, error } = await supabaseAdmin
-    .from('category_banners')
-    .insert({
-      ...bannerData,
-      banner_image: imageUrl
-    })
-    .select()
-    .single();
+  const validData = validation.data;
+  const imageUrl = await uploadBannerImage(file, validData.category);
 
-  if (error) {
-    await deleteImageFromStorage(imageUrl, bannerData.category);
+  try {
+    const dataWithImage = { ...validData, banner_image: imageUrl.medium || imageUrl.original || imageUrl };
+    const keys = Object.keys(dataWithImage);
+    const cols = keys.map(k => `"${k}"`).join(', ');
+    const vals = keys.map((_, i) => `$${i + 1}`).join(', ');
+    const values = keys.map(k => dataWithImage[k]);
+
+    const [banner] = await sql(
+      `INSERT INTO category_banners (${cols}) VALUES (${vals}) RETURNING *`,
+      values
+    );
+
+    return banner;
+  } catch (error) {
+    await deleteProductImage(imageUrl);
     throw new Error(`Failed to create banner: ${error.message}`);
   }
-
-  return data;
 };
 
 export const updateBanner = async (id, updates, file) => {
+  const validation = updateBannerSchema.safeParse(updates);
+  if (!validation.success) throw new ValidationError(validation.error.errors[0].message);
+
   const existingBanner = await getBannerById(id);
-  
   let imageUrl = existingBanner.banner_image;
-  
+
   if (file) {
-    await deleteImageFromStorage(existingBanner.banner_image, existingBanner.category);
-    imageUrl = await uploadBannerImage(file, updates.category || existingBanner.category);
+    await deleteProductImage(existingBanner.banner_image);
+    const uploadRes = await uploadBannerImage(file, updates.category || existingBanner.category);
+    imageUrl = uploadRes.medium || uploadRes.original || uploadRes;
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('category_banners')
-    .update({
-      ...updates,
-      banner_image: imageUrl
-    })
-    .eq('id', id)
-    .select()
-    .single();
+  try {
+    const dataToUpdate = { ...validation.data, banner_image: imageUrl, updated_at: new Date().toISOString() };
+    const keys = Object.keys(dataToUpdate);
+    const setFragments = keys.map((k, i) => `"${k}" = $${i + 2}`);
+    const values = [id, ...keys.map(k => dataToUpdate[k])];
 
-  if (error) {
-    if (file) {
-      await deleteImageFromStorage(imageUrl, updates.category || existingBanner.category);
-    }
+    const [banner] = await sql(
+      `UPDATE category_banners SET ${setFragments.join(', ')} WHERE id = $1 RETURNING *`,
+      values
+    );
+    return banner;
+  } catch (error) {
+    if (file) await deleteProductImage(imageUrl);
     throw new Error(`Failed to update banner: ${error.message}`);
   }
-
-  return data;
 };
 
 export const deleteBanner = async (id) => {
   const banner = await getBannerById(id);
-
-  await deleteImageFromStorage(banner.banner_image, banner.category);
-
-  const { error } = await supabaseAdmin
-    .from('category_banners')
-    .delete()
-    .eq('id', id);
-
-  if (error) {
-    throw new Error(`Failed to delete banner: ${error.message}`);
-  }
-
+  if (banner.banner_image) await deleteProductImage(banner.banner_image);
+  await sql('DELETE FROM category_banners WHERE id = $1', [id]);
   return true;
 };
-

@@ -4,6 +4,9 @@ import { authenticate, requireAdmin } from '../middleware/auth.js';
 import { uploadVideoHandler, uploadImages } from '../middleware/upload.js';
 import { adminLimiter } from '../middleware/rateLimiter.js';
 
+import { uploadVideoSchema, uploadImageSchema } from '../validators/upload.validators.js';
+import { validate } from '../middleware/validate.js';
+
 const router = express.Router();
 
 router.post(
@@ -12,6 +15,7 @@ router.post(
   requireAdmin,
   adminLimiter,
   uploadVideoHandler,
+  validate(uploadVideoSchema),
   uploadController.uploadReelVideo
 );
 
@@ -21,6 +25,7 @@ router.post(
   requireAdmin,
   adminLimiter,
   uploadImages.single('image'),
+  validate(uploadImageSchema),
   uploadController.uploadImage
 );
 

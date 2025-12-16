@@ -1,7 +1,6 @@
--- Fashion Discovery App Database Schema for Supabase
--- Complete production schema matching actual database structure
--- Last updated: 2025-12-13
--- Run this script in Supabase SQL Editor
+-- Neon Database Schema for MEGG API
+-- Complete production schema compatible with Neon
+-- Last updated: 2025-12-14
 
 -- =============================================================================
 -- EXTENSIONS
@@ -88,9 +87,10 @@ CREATE TYPE video_category AS ENUM (
 -- CORE TABLES
 -- =============================================================================
 
--- Users table (extends auth.users)
+-- Users table (standalone - NOT linked to auth.users like Supabase)
+-- Neon Auth stores users in neon_auth.users, this is your app's user data
 CREATE TABLE users (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY,
   full_name TEXT,
   avatar_url TEXT,
   preferences JSONB DEFAULT '{}'::jsonb,
@@ -109,6 +109,7 @@ CREATE TABLE products (
   subcategory product_subcategory,
   color TEXT NOT NULL,
   fabric TEXT[] DEFAULT '{}',
+  semantic_tags TEXT[] DEFAULT '{}',
   affiliate_link TEXT,
   is_active BOOLEAN DEFAULT TRUE,
   clicks INTEGER DEFAULT 0,
@@ -255,6 +256,7 @@ CREATE INDEX idx_products_popularity ON products(popularity DESC);
 CREATE INDEX idx_products_price ON products(price);
 CREATE INDEX idx_products_created_at ON products(created_at DESC);
 CREATE INDEX idx_products_search_vector ON products USING GIN (search_vector);
+CREATE INDEX idx_products_semantic_tags ON products USING GIN (semantic_tags);
 CREATE INDEX idx_products_name_trgm ON products USING GIN (name gin_trgm_ops);
 CREATE INDEX idx_products_brand_trgm ON products USING GIN (brand gin_trgm_ops);
 CREATE INDEX idx_products_category_subcategory ON products(category, subcategory);
@@ -373,19 +375,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION handle_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO public.users (id, full_name, avatar_url)
-  VALUES (
-    NEW.id,
-    NEW.raw_user_meta_data->>'full_name',
-    NEW.raw_user_meta_data->>'avatar_url'
-  );
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
 CREATE OR REPLACE FUNCTION refresh_trending_products()
 RETURNS void AS $$
 BEGIN
@@ -422,131 +411,15 @@ CREATE TRIGGER trigger_category_banners_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION handle_new_user();
-
--- =============================================================================
--- ROW LEVEL SECURITY
--- =============================================================================
-
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE products ENABLE ROW LEVEL SECURITY;
-ALTER TABLE outfits ENABLE ROW LEVEL SECURITY;
-ALTER TABLE color_combos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE trending_clicks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE offers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE reels ENABLE ROW LEVEL SECURITY;
-ALTER TABLE reel_likes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE wishlist ENABLE ROW LEVEL SECURITY;
-ALTER TABLE category_banners ENABLE ROW LEVEL SECURITY;
-
--- Users policies
-CREATE POLICY "Users can view all profiles" ON users
-  FOR SELECT USING (true);
-
-CREATE POLICY "Users can update own profile" ON users
-  FOR UPDATE USING (auth.uid() = id);
-
-CREATE POLICY "Users can insert own profile" ON users
-  FOR INSERT WITH CHECK (auth.uid() = id);
-
--- Products policies
-CREATE POLICY "Anyone can view active products" ON products
-  FOR SELECT USING (is_active = true OR auth.uid() IS NOT NULL);
-
-CREATE POLICY "Service role can insert products" ON products
-  FOR INSERT WITH CHECK (auth.jwt()->>'role' = 'service_role');
-
-CREATE POLICY "Service role can update products" ON products
-  FOR UPDATE USING (auth.jwt()->>'role' = 'service_role');
-
-CREATE POLICY "Service role can delete products" ON products
-  FOR DELETE USING (auth.jwt()->>'role' = 'service_role');
-
--- Outfits policies
-CREATE POLICY "Anyone can view outfits" ON outfits
-  FOR SELECT USING (true);
-
-CREATE POLICY "Service role can manage outfits" ON outfits
-  FOR ALL USING (auth.jwt()->>'role' = 'service_role');
-
--- Color combos policies
-CREATE POLICY "Anyone can view color combos" ON color_combos
-  FOR SELECT USING (true);
-
-CREATE POLICY "Service role can manage color combos" ON color_combos
-  FOR ALL USING (auth.jwt()->>'role' = 'service_role');
-
--- Trending clicks policies
-CREATE POLICY "Anyone can insert clicks" ON trending_clicks
-  FOR INSERT WITH CHECK (true);
-
-CREATE POLICY "Service role can view all clicks" ON trending_clicks
-  FOR SELECT USING (auth.jwt()->>'role' = 'service_role');
-
--- Offers policies
-CREATE POLICY "Anyone can view offers" ON offers
-  FOR SELECT USING (true);
-
-CREATE POLICY "Service role can manage offers" ON offers
-  FOR ALL USING (auth.jwt()->>'role' = 'service_role');
-
--- Reels policies
-CREATE POLICY "Anyone can view reels" ON reels
-  FOR SELECT USING (true);
-
-CREATE POLICY "Service role can manage reels" ON reels
-  FOR ALL USING (auth.jwt()->>'role' = 'service_role');
-
-CREATE POLICY "Anyone can update reel views" ON reels
-  FOR UPDATE USING (true);
-
--- Reel likes policies
-CREATE POLICY "Users can view their own likes" ON reel_likes
-  FOR SELECT USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert their own likes" ON reel_likes
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can delete their own likes" ON reel_likes
-  FOR DELETE USING (auth.uid() = user_id);
-
--- Wishlist policies
-CREATE POLICY "Users can view own wishlist" ON wishlist
-  FOR SELECT USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can add to own wishlist" ON wishlist
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can remove from own wishlist" ON wishlist
-  FOR DELETE USING (auth.uid() = user_id);
-
--- Category banners policies
-CREATE POLICY "Service role can manage banners" ON category_banners
-  FOR ALL USING (auth.jwt()->>'role' = 'service_role');
-
 -- =============================================================================
 -- NOTES
 -- =============================================================================
-
--- Storage buckets (create in Supabase Dashboard > Storage):
--- 1. product-images (public) - for product image URLs
--- 2. outfit-banners (public) - for outfit banner images
--- 3. offer-banners (public) - for offer banner images and category banners
--- 4. reel-thumbnails (public) - for reel thumbnail images
-
--- Storage policies (configure in Dashboard):
--- For all buckets:
---   - Public read access (anyone can view)
---   - Authenticated users can upload
---   - Service role can delete
-
--- Cloudinary Configuration:
--- Reel videos are hosted on Cloudinary
--- Configure Cloudinary credentials in environment variables:
---   - CLOUDINARY_CLOUD_NAME
---   - CLOUDINARY_API_KEY
---   - CLOUDINARY_API_SECRET
-
--- Note: Configure Google OAuth in Supabase Dashboard > Authentication > Providers
+-- 
+-- REMOVED FROM SUPABASE SCHEMA:
+-- 1. auth.users references - Neon Auth handles this separately in neon_auth schema
+-- 2. Row Level Security (RLS) - API handles auth, not needed at DB level
+-- 3. on_auth_user_created trigger - Neon Auth works differently
+-- 4. handle_new_user() function - Not needed for Neon Auth
+--
+-- The users table is standalone - your app creates users when they
+-- first authenticate via Neon Auth, using the user ID from neon_auth.users

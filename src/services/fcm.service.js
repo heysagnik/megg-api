@@ -1,36 +1,22 @@
-import { supabaseAdmin } from '../config/supabase.js';
+import { sql } from '../config/neon.js';
 import { getMessaging } from '../config/firebase.js';
 import logger from '../utils/logger.js';
 
-// Send notification to all users and save to database
 export const sendNotificationToAll = async (title, body, image, link) => {
   const messaging = getMessaging();
 
-  // Save notification to database first
-  const { data: notification, error: dbError } = await supabaseAdmin
-    .from('notifications')
-    .insert({
-      title,
-      description: body,
-      image,
-      link
-    })
-    .select()
-    .single();
+  const [notification] = await sql(
+    'INSERT INTO notifications (title, description, image, link) VALUES ($1, $2, $3, $4) RETURNING *',
+    [title, body, image, link]
+  );
 
-  if (dbError) {
-    throw new Error(`Failed to save notification: ${dbError.message}`);
-  }
+  if (!notification) throw new Error('Failed to save notification');
 
-  // Send to FCM topic (all users subscribed to 'all-users' topic)
   const message = {
     topic: 'all-users',
-    notification: {
-      title,
-      body
-    },
+    notification: { title, body },
     data: {
-      notification_id: notification.id,
+      notification_id: notification.id.toString(),
       link: link || ''
     },
     android: {
@@ -67,7 +53,6 @@ export const sendNotificationToAll = async (title, body, image, link) => {
     };
   } catch (error) {
     logger.error(`FCM send error: ${error.message}`);
-    // Notification is still saved in DB even if FCM fails
     return {
       success: true,
       notification,
@@ -76,25 +61,25 @@ export const sendNotificationToAll = async (title, body, image, link) => {
   }
 };
 
-// Get all notifications (paginated)
 export const getNotifications = async ({ page = 1, limit = 20 }) => {
-  const offset = (page - 1) * limit;
+  const p = Number(page) || 1;
+  const l = Number(limit) || 20;
+  const offset = (p - 1) * l;
 
-  const { data, error, count } = await supabaseAdmin
-    .from('notifications')
-    .select('*', { count: 'exact' })
-    .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1);
+  const [data, countResult] = await Promise.all([
+    sql('SELECT * FROM notifications ORDER BY created_at DESC LIMIT $1 OFFSET $2', [l, offset]),
+    sql('SELECT COUNT(*)::int FROM notifications')
+  ]);
 
-  if (error) {
-    throw new Error(`Failed to fetch notifications: ${error.message}`);
-  }
+  const count = countResult[0]?.count || 0;
+
+  if (!data) throw new Error('Failed to fetch notifications');
 
   return {
     notifications: data || [],
     total: count || 0,
-    page,
-    limit,
-    totalPages: Math.ceil((count || 0) / limit)
+    page: p,
+    limit: l,
+    totalPages: Math.ceil((count || 0) / l)
   };
 };

@@ -1,77 +1,34 @@
-import { supabaseAdmin } from '../config/supabase.js';
+import { sql } from '../config/neon.js';
 
 export const getUserWishlist = async (userId) => {
-  const { data: wishlistItems, error: wishlistError } = await supabaseAdmin
-    .from('wishlist')
-    .select('id, product_id, added_at')
-    .eq('user_id', userId)
-    .order('added_at', { ascending: false });
-
-  if (wishlistError) {
-    throw new Error(`Failed to fetch wishlist: ${wishlistError.message}`);
-  }
-
-  if (!wishlistItems || wishlistItems.length === 0) {
-    return [];
-  }
-
-  const productIds = wishlistItems.map(item => item.product_id);
-
-  const { data: products, error: productsError } = await supabaseAdmin
-    .from('products')
-    .select('id, name, price, brand, images, category, color, affiliate_link')
-    .in('id', productIds);
-
-  if (productsError) {
-    throw new Error(`Failed to fetch wishlist products: ${productsError.message}`);
-  }
-
-  return wishlistItems.map(item => {
-    const product = products.find(p => p.id === item.product_id);
-    return {
-      ...product,
-      wishlist_id: item.id,
-      added_at: item.added_at
-    };
-  }).filter(item => item.id);
+  const items = await sql(
+    `SELECT p.id, p.name, p.price, p.brand, p.images, p.category, p.color, p.affiliate_link, w.id as wishlist_id, w.added_at
+     FROM wishlist w
+     JOIN products p ON w.product_id = p.id
+     WHERE w.user_id = $1 AND p.is_active = true
+     ORDER BY w.added_at DESC`,
+    [userId]
+  );
+  return items || [];
 };
 
 export const addToWishlist = async (userId, productId) => {
-  const { data: existing } = await supabaseAdmin
-    .from('wishlist')
-    .select('id')
-    .eq('user_id', userId)
-    .eq('product_id', productId)
-    .maybeSingle();
+  const [existing] = await sql('SELECT id FROM wishlist WHERE user_id = $1 AND product_id = $2 LIMIT 1', [userId, productId]);
 
   if (existing) {
     return { message: 'Product already in wishlist', id: existing.id };
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('wishlist')
-    .insert({ user_id: userId, product_id: productId })
-    .select()
-    .single();
+  const [connection] = await sql(
+    'INSERT INTO wishlist (user_id, product_id) VALUES ($1, $2) RETURNING *',
+    [userId, productId]
+  );
 
-  if (error) {
-    throw new Error(`Failed to add to wishlist: ${error.message}`);
-  }
-
-  return data;
+  if (!connection) throw new Error('Failed to add to wishlist');
+  return connection;
 };
 
 export const removeFromWishlist = async (userId, productId) => {
-  const { error } = await supabaseAdmin
-    .from('wishlist')
-    .delete()
-    .eq('user_id', userId)
-    .eq('product_id', productId);
-
-  if (error) {
-    throw new Error(`Failed to remove from wishlist: ${error.message}`);
-  }
-
+  await sql('DELETE FROM wishlist WHERE user_id = $1 AND product_id = $2', [userId, productId]);
   return true;
 };
-

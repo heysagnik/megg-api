@@ -16,7 +16,7 @@ import fcmRoutes from './fcm.routes.js';
 
 const router = express.Router();
 
-router.use('/auth', authRoutes);
+router.use('/account', authRoutes);
 router.use('/products', productRoutes);
 router.use('/search', searchRoutes);
 router.use('/outfits', outfitRoutes);

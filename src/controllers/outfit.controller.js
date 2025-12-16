@@ -2,11 +2,18 @@ import * as outfitService from '../services/outfit.service.js';
 
 export const listOutfits = async (req, res, next) => {
   try {
-    const outfits = await outfitService.listOutfits();
+    const { page, limit } = req.query;
+    const result = await outfitService.listOutfits({ page, limit });
 
     res.json({
       success: true,
-      data: { outfits }
+      data: { outfits: result.outfits },
+      pagination: {
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+        totalPages: result.totalPages
+      }
     });
   } catch (error) {
     next(error);

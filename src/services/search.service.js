@@ -1,658 +1,428 @@
-import { supabaseAdmin } from '../config/supabase.js';
-import { COLOR_KEYWORDS, STYLE_KEYWORDS, CATEGORY_KEYWORDS, SUBCATEGORY_KEYWORDS, BRAND_KEYWORDS } from '../config/searchKeywords.js';
-import { PRODUCT_SUBCATEGORIES, PRODUCT_CATEGORIES } from '../config/constants.js';
-import { PAGINATION } from '../config/constants.js';
+import { sql } from '../config/neon.js';
+import {
+  PRODUCT_CATEGORIES,
+  PRODUCT_SUBCATEGORIES,
+  ALL_SUBCATEGORIES,
+  PRODUCT_COLORS,
+  PRODUCT_BRANDS
+} from '../config/constants.js';
+import { expandQuery, OCCASION_MAP } from '../config/searchMappings.js';
 import logger from '../utils/logger.js';
 
-// --- Helpers ---
+const generateTypoVariants = (word) => {
+  const variants = [];
+  const w = word.toLowerCase();
+  if (w.length < 3) return variants;
 
-const levenshteinDistance = (a, b) => {
-  if (a.length === 0) return b.length;
-  if (b.length === 0) return a.length;
-
-  const matrix = [];
-
-  for (let i = 0; i <= b.length; i++) {
-    matrix[i] = [i];
+  for (let i = 0; i < w.length; i++) {
+    variants.push(w.slice(0, i) + w.slice(i + 1));
   }
-
-  for (let j = 0; j <= a.length; j++) {
-    matrix[0][j] = j;
+  for (let i = 0; i < w.length - 1; i++) {
+    variants.push(w.slice(0, i) + w[i + 1] + w[i] + w.slice(i + 2));
   }
+  for (let i = 0; i < w.length; i++) {
+    variants.push(w.slice(0, i) + w[i] + w[i] + w.slice(i + 1));
+  }
+  return variants.filter(v => v !== w && v.length >= 3);
+};
 
-  for (let i = 1; i <= b.length; i++) {
-    for (let j = 1; j <= a.length; j++) {
-      if (b.charAt(i - 1) === a.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1];
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1, // substitution
-          Math.min(
-            matrix[i][j - 1] + 1, // insertion
-            matrix[i - 1][j] + 1 // deletion
-          )
-        );
+const buildTypoMap = () => {
+  const map = {};
+
+  const allTerms = [
+    ...PRODUCT_CATEGORIES,
+    ...ALL_SUBCATEGORIES,
+    ...PRODUCT_COLORS,
+    ...PRODUCT_BRANDS,
+  ];
+
+  allTerms.forEach(term => {
+    const words = term.toLowerCase().split(/[\s-]+/);
+    words.forEach(word => {
+      if (word.length >= 4) {
+        generateTypoVariants(word).forEach(typo => {
+          if (!map[typo]) map[typo] = word;
+        });
       }
-    }
-  }
+    });
+  });
 
-  return matrix[b.length][a.length];
+  const manualTypos = {
+    'tshirt': 't-shirt', 'teeshirt': 't-shirt',
+    'hoody': 'hoodie', 'hoddie': 'hoodie', 'hoodi': 'hoodie',
+    'runing': 'running', 'runnig': 'running',
+    'addidas': 'adidas', 'adiddas': 'adidas',
+    'niike': 'nike', 'nkie': 'nike',
+    'causal': 'casual', 'formall': 'formal',
+    'sneekers': 'sneakers', 'sneeker': 'sneaker', 'snikers': 'sneakers',
+    'sheos': 'shoes', 'shooes': 'shoes',
+  };
+
+  return { ...map, ...manualTypos };
 };
 
-const matchWithWordBoundary = (text, keyword) => {
-  const regex = new RegExp(`\\b${keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-  return regex.test(text);
+const TYPO_MAP = buildTypoMap();
+
+const correctTypos = (query) => {
+  if (!query) return query;
+  return query.toLowerCase().split(/\s+/).map(word => TYPO_MAP[word] || word).join(' ');
 };
 
-const isFuzzyMatch = (text, keyword) => {
-  const textLower = text.toLowerCase();
-  const keywordLower = keyword.toLowerCase();
+const buildSynonymMap = () => {
+  const map = {};
 
-  // 1. Exact/Prefix/Word Boundary
-  if (matchWithWordBoundary(textLower, keywordLower)) return true;
-  if (textLower.includes(keywordLower)) return true;
+  PRODUCT_CATEGORIES.forEach(cat => {
+    const key = cat.toLowerCase();
+    const subs = PRODUCT_SUBCATEGORIES[cat] || [];
+    map[key] = [...new Set([key, ...subs.map(s => s.toLowerCase().split(/[\s-]+/)).flat()])];
+  });
 
-  // 2. Levenshtein Distance
-  // Allow 1 edit for words > 3 chars, 2 edits for words > 6 chars
-  const distance = levenshteinDistance(textLower, keywordLower);
-  const allowedDistance = keywordLower.length > 6 ? 2 : keywordLower.length > 3 ? 1 : 0;
+  Object.entries(PRODUCT_SUBCATEGORIES).forEach(([cat, subs]) => {
+    subs.forEach(sub => {
+      const key = sub.toLowerCase();
+      map[key] = [key, cat.toLowerCase()];
+    });
+  });
 
-  return distance <= allowedDistance;
+  const conceptSynonyms = {
+    'workout': ['gym', 'fitness', 'training', 'exercise', 'athletic', 'sports'],
+    'gym': ['workout', 'fitness', 'training', 'athletic', 'sports wear'],
+    'office': ['formal', 'professional', 'business', 'office wear'],
+    'formal': ['office', 'professional', 'business', 'office wear'],
+    'party': ['festive', 'celebration', 'wedding', 'traditional'],
+    'wedding': ['party', 'festive', 'traditional', 'ethnic'],
+    'casual': ['everyday', 'relaxed', 'comfortable', 'tshirt', 'jeans'],
+    'winter': ['warm', 'cold', 'thermal', 'jacket', 'sweater', 'hoodies'],
+    'warm': ['winter', 'thermal', 'fleece', 'jacket', 'sweater'],
+    'summer': ['light', 'breathable', 'cool', 'linen', 'cotton'],
+    'running': ['jogging', 'marathon', 'athletic', 'sports', 'sports shoes'],
+    'sneakers': ['shoes', 'footwear', 'trainers', 'canvas shoes'],
+    'tee': ['tshirt', 't-shirt', 'top'],
+    'hoodie': ['sweatshirt', 'hoodies', 'pullover'],
+    'luxury': ['premium', 'expensive', 'designer', 'luxurious'],
+    'budget': ['cheap', 'affordable', 'budget-friendly'],
+    'streetwear': ['urban', 'trendy', 'hoodies', 'oversized'],
+    'minimalist': ['minimal', 'simple', 'clean', 'basic'],
+  };
+
+  return { ...map, ...conceptSynonyms };
 };
 
+const SYNONYM_MAP = buildSynonymMap();
 
-const findBestCategoryMatch = (queryWords) => {
-  const scores = [];
-  const fullQuery = queryWords.filter(Boolean).join(' ').toLowerCase();
-
-  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    for (const keyword of keywords) {
-      const keywordLower = keyword.toLowerCase();
-
-      if (keywordLower.includes(' ') && fullQuery.includes(keywordLower)) {
-        scores.push({ category, score: 100, keyword, matchedIndex: -1 }); // -1 indicates phrase match
-        continue;
-      }
-
-      queryWords.forEach((word, index) => {
-        if (!word) return;
-
-        // Exact/Prefix/Boundary
-        if (matchWithWordBoundary(word, keywordLower)) {
-          scores.push({ category, score: 80, keyword, matchedIndex: index });
-          return;
-        }
-
-        // Fuzzy
-        if (word.length >= 3) {
-          const distance = levenshteinDistance(word, keywordLower);
-          const allowed = keywordLower.length > 5 ? 2 : 1;
-          if (distance <= allowed) {
-            scores.push({ category, score: 60 - (distance * 10), keyword, matchedIndex: index });
-          }
-        }
-      });
-    }
-  }
-
-  if (scores.length === 0) return null;
-
-  scores.sort((a, b) => b.score - a.score);
-  return scores[0];
-};
-
-const findBestSubcategoryMatch = (queryWords, category = null) => {
-  const subcategoryScores = [];
-
-  for (const [subcategory, keywords] of Object.entries(SUBCATEGORY_KEYWORDS)) {
-    let categoryMatch = false;
-    if (category) {
-      const categorySubcategories = PRODUCT_SUBCATEGORIES[category] || [];
-      categoryMatch = categorySubcategories.includes(subcategory);
-    }
-
-    if (!categoryMatch && category) continue;
-
-    const sortedKeywords = [...keywords].sort((a, b) => b.length - a.length);
-
-    for (const keyword of sortedKeywords) {
-      const keywordLower = keyword.toLowerCase();
-
-      queryWords.forEach((word, index) => {
-        if (!word) return;
-
-        let matchScore = 0;
-
-        if (word === keywordLower) {
-          matchScore = 10000;
-        } else if (matchWithWordBoundary(word, keywordLower)) {
-          matchScore = 5000;
-        } else if (word.length >= 3) {
-          const distance = levenshteinDistance(word, keywordLower);
-          const allowed = keywordLower.length > 5 ? 2 : 1;
-          if (distance <= allowed) {
-            matchScore = 3000 - (distance * 500);
-          }
-        }
-
-        if (matchScore > 0) {
-          if (categoryMatch) matchScore += 100000;
-          subcategoryScores.push({
-            subcategory,
-            score: matchScore,
-            keyword,
-            matchedIndex: index,
-            categoryMatch
-          });
-        }
-      });
-    }
-  }
-
-  if (subcategoryScores.length === 0) return null;
-
-  subcategoryScores.sort((a, b) => b.score - a.score);
-  return subcategoryScores[0];
+const expandSynonyms = (tags) => {
+  const expanded = new Set(tags);
+  tags.forEach(tag => {
+    const t = tag.toLowerCase();
+    if (SYNONYM_MAP[t]) SYNONYM_MAP[t].forEach(s => expanded.add(s));
+  });
+  return Array.from(expanded);
 };
 
 export const parseSearchQuery = (query) => {
-  const normalizedQuery = query.toLowerCase().trim();
-  const words = normalizedQuery.split(/\s+/);
-  const usedIndices = new Set();
+  if (!query?.trim()) return { searchTerm: null };
+  return expandQuery(query);
+};
 
-  const filters = {
-    category: null,
-    subcategory: null,
-    color: null,
-    style: null,
-    brand: null,
-    categories: [],
-    searchTerm: null,
-    isDirectCategoryMatch: false,
-    isSubcategoryMatch: false,
-    isStyleSearch: false,
-    isBrandMatch: false
-  };
+export const unifiedSearch = async (params) => {
+  const { query: rawQuery, category, subcategory, color, brand, sort, page = 1, limit = 20 } = params;
+  const offset = (page - 1) * limit;
 
-  // Helper to get unused words
-  const getUnusedWords = () => words.map((w, i) => usedIndices.has(i) ? null : w);
+  if (rawQuery && rawQuery.length === 1) {
+    return { products: [], banners: [], total: 0, page, limit, totalPages: 0, searchMode: 'empty', filters: {}, metadata: {} };
+  }
 
-  // 1. Extract Color (Fuzzy)
-  for (const [color, variations] of Object.entries(COLOR_KEYWORDS)) {
-    let foundColor = false;
-    words.forEach((word, index) => {
-      if (usedIndices.has(index)) return;
+  const query = correctTypos(rawQuery);
+  const parsed = query ? expandQuery(query) : {};
+  const appliedCategory = category || parsed.category;
+  const appliedSubcategory = subcategory || parsed.subcategory;
+  const appliedColor = color || parsed.color;
+  const appliedBrand = brand || parsed.brand;
 
-      const isMatch = variations.some(v => {
-        if (word === v) return true;
-        if (word.length >= 3) {
-          const dist = levenshteinDistance(word, v);
-          return dist <= (v.length > 4 ? 1 : 0);
-        }
-        return false;
-      });
+  let semanticTags = [...(parsed.semanticTags || [])];
+  if (query) {
+    query.toLowerCase().split(/\s+/).filter(w => w.length > 2).forEach(w => semanticTags.push(w));
+  }
+  semanticTags = expandSynonyms(semanticTags);
 
-      if (isMatch) {
-        filters.color = color;
-        usedIndices.add(index);
-        foundColor = true;
-      }
+  let occasionCategories = [];
+  if (parsed.occasion && OCCASION_MAP[parsed.occasion]) {
+    occasionCategories = OCCASION_MAP[parsed.occasion].categories;
+  }
+
+  try {
+    const results = await executeSearch({
+      query, appliedCategory, appliedSubcategory, appliedColor, appliedBrand,
+      semanticTags, occasionCategories, limit, offset, sort
     });
-    if (foundColor) break;
-  }
 
-  for (const [brand, variations] of Object.entries(BRAND_KEYWORDS)) {
-    let foundBrand = false;
-    const unusedQuery = getUnusedWords().filter(Boolean).join(' ');
-    for (const v of variations) {
-      if (isFuzzyMatch(unusedQuery, v)) {
-        filters.brand = brand;
-        filters.isBrandMatch = true;
+    const banners = appliedCategory
+      ? await sql('SELECT id, banner_image, link, display_order FROM category_banners WHERE category = $1 ORDER BY display_order ASC', [appliedCategory])
+      : [];
 
-        const vWords = v.split(/\s+/);
-        let matchCount = 0;
-        words.forEach((word, index) => {
-          if (usedIndices.has(index)) return;
-          if (matchCount < vWords.length && isFuzzyMatch(word, vWords[matchCount])) {
-            usedIndices.add(index);
-            matchCount++;
-          }
-        });
-        foundBrand = true;
-        break;
-      }
-    }
-    if (foundBrand) break;
-  }
+    const total = results.length > 0 ? parseInt(results[0].full_count || 0) : 0;
 
-  const bestCategoryMatch = findBestCategoryMatch(getUnusedWords());
-  if (bestCategoryMatch) {
-    filters.category = bestCategoryMatch.category;
-    filters.isDirectCategoryMatch = true;
-    usedIndices.add(bestCategoryMatch.matchedIndex);
-  }
-
-  const bestSubMatch = findBestSubcategoryMatch(getUnusedWords(), filters.category);
-  if (bestSubMatch) {
-    const { subcategory, matchedIndex } = bestSubMatch;
-
-    let isValid = true;
-    if (filters.category) {
-      const validSubs = PRODUCT_SUBCATEGORIES[filters.category] || [];
-      if (!validSubs.includes(subcategory)) isValid = false;
-    }
-
-    if (isValid) {
-      filters.subcategory = subcategory;
-      filters.isSubcategoryMatch = true;
-      usedIndices.add(matchedIndex);
-    }
-  }
-
-  if (!filters.category && !filters.subcategory) {
-    for (const [style, config] of Object.entries(STYLE_KEYWORDS)) {
-      let foundStyle = false;
-      words.forEach((word, index) => {
-        if (usedIndices.has(index)) return;
-        if (config.keywords.some(k => isFuzzyMatch(word, k))) {
-          filters.style = style;
-          filters.categories = config.categories;
-          filters.isStyleSearch = true;
-          usedIndices.add(index);
-          foundStyle = true;
-        }
-      });
-      if (foundStyle) break;
-    }
-  }
-
-  const remainingWords = words.filter((_, i) => !usedIndices.has(i));
-  filters.searchTerm = remainingWords.length > 0 ? remainingWords.join(' ') : null;
-
-  return filters;
-};
-
-const applySorting = (query, sort) => {
-  switch (sort) {
-    case 'popularity':
-      return query.order('popularity', { ascending: false }).order('created_at', { ascending: false });
-    case 'price_asc':
-      return query.order('price', { ascending: true });
-    case 'price_desc':
-      return query.order('price', { ascending: false });
-    case 'newest':
-      return query.order('created_at', { ascending: false });
-    case 'oldest':
-      return query.order('created_at', { ascending: true });
-    default:
-      return query.order('popularity', { ascending: false }).order('created_at', { ascending: false });
-  }
-};
-
-export const unifiedSearch = async ({
-  query = null,
-  category = null,
-  subcategory = null,
-  color = null,
-  brand = null,
-  sort = 'popularity',
-  page = 1,
-  limit = PAGINATION.DEFAULT_LIMIT
-}) => {
-  const p = Number.isInteger(Number(page)) && Number(page) > 0 ? Number(page) : 1;
-  const l = Math.max(1, Math.min(Number.isInteger(Number(limit)) ? Number(limit) : PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT));
-  const offset = (p - 1) * l;
-  const hasExplicitFilters = category || subcategory || color || brand;
-
-  let filters = {};
-  let searchMode = 'explicit';
-
-  // --- Parsing Logic ---
-  if (query && !hasExplicitFilters) {
-    filters = parseSearchQuery(query);
-    searchMode = 'smart';
-  } else if (hasExplicitFilters) {
-    filters = {
-      category: category || null,
-      subcategory: subcategory || null,
-      color: color || null,
-      brand: brand || null,
-      searchTerm: query
+    return {
+      products: results,
+      banners,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      searchMode: results.length > 0 ? 'smart' : 'empty',
+      filters: { appliedCategory, appliedSubcategory, appliedColor, appliedBrand, appliedSort: sort || 'relevance' },
+      metadata: { query, semanticTagsUsed: semanticTags.slice(0, 10) },
     };
-
-    if (query) {
-      const smartFilters = parseSearchQuery(query);
-      if (!filters.category && smartFilters.category) filters.category = smartFilters.category;
-      if (!filters.subcategory && smartFilters.subcategory) filters.subcategory = smartFilters.subcategory;
-      if (!filters.color && smartFilters.color) filters.color = smartFilters.color;
-      if (!filters.brand && smartFilters.brand) filters.brand = smartFilters.brand;
-    }
-    searchMode = 'filtered';
-  } else {
-    filters = {};
-    searchMode = 'browse';
+  } catch (e) {
+    logger.error('Search error', e);
+    throw new Error(`Database error: ${e.message}`);
   }
+};
 
-  // --- Base Query Construction ---
-  const buildQuery = (searchFilters, isRelaxed = false) => {
-    let dbQuery = supabaseAdmin
-      .from('products')
-      .select('id, name, description, price, brand, images, category, subcategory, color, affiliate_link, popularity, clicks, created_at', {
-        count: 'exact'
-      });
+const executeSearch = async (opts) => {
+  const { query, appliedCategory, appliedSubcategory, appliedColor, appliedBrand,
+    semanticTags, occasionCategories, limit, offset, sort } = opts;
 
-    // Apply Filters
-    if (searchFilters.subcategory) dbQuery = dbQuery.eq('subcategory', searchFilters.subcategory);
-    else if (searchFilters.category) dbQuery = dbQuery.eq('category', searchFilters.category);
-    else if (searchFilters.isStyleSearch && searchFilters.categories?.length) {
-      const validCategories = searchFilters.categories.filter(cat => PRODUCT_CATEGORIES.includes(cat));
-      if (validCategories.length) dbQuery = dbQuery.in('category', validCategories);
-    }
-
-    if (searchFilters.color) dbQuery = dbQuery.eq('color', searchFilters.color);
-    if (searchFilters.brand) dbQuery = dbQuery.ilike('brand', `%${searchFilters.brand}%`);
-
-    // Apply Text Search with improved handling
-    const term = searchFilters.searchTerm;
-    if (term && term.trim()) {
-      // Clean and normalize the search term
-      // Remove FTS special characters but preserve apostrophes for words like "POND'S"
-      const cleanTerm = term.replace(/[|&:*!()]/g, ' ').trim();
-
-      if (cleanTerm) {
-        const words = cleanTerm.split(/\s+/).filter(w => w.length > 0);
-
-        if (words.length > 0) {
-          if (isRelaxed) {
-            // Relaxed: OR logic between terms with prefix matching
-            // This catches partial matches and typos
-            const formattedQuery = words
-              .map(w => `'${w.replace(/'/g, "''")}':*`)
-              .join(' | ');
-            dbQuery = dbQuery.filter('search_vector', 'fts', formattedQuery);
-          } else {
-            // Strict: AND logic with prefix matching for each term
-            // Example: "black hoodie" -> 'black':* & 'hoodie':*
-            const formattedQuery = words
-              .map(w => `'${w.replace(/'/g, "''")}':*`)
-              .join(' & ');
-            dbQuery = dbQuery.filter('search_vector', 'fts', formattedQuery);
-          }
-        }
-      }
-    }
-
-    return dbQuery;
-  };
-
-  // --- Execute Strict Search ---
-  let dbQuery = buildQuery(filters, false);
-  dbQuery = applySorting(dbQuery, sort);
-  dbQuery = dbQuery.range(offset, offset + l - 1);
-
-  const productsPromise = dbQuery.then(({ data, error, count }) => {
-    if (error) throw new Error(`Search failed: ${error.message}`);
-    return { data, count };
-  });
-
-  // --- Fetch Banners (Parallel) ---
-  const appliedCategory = filters.category || category;
-  let bannersPromise = Promise.resolve([]);
+  const params = [];
+  let idx = 1;
+  const conditions = ['is_active = true'];
 
   if (appliedCategory) {
-    bannersPromise = supabaseAdmin
-      .from('category_banners')
-      .select('id, banner_image, link, title, display_order')
-      .eq('category', appliedCategory)
-      .order('display_order', { ascending: true })
-      .then(({ data }) => data || []);
+    conditions.push(`category::text ILIKE $${idx++}`);
+    params.push(`%${appliedCategory}%`);
+  } else if (occasionCategories.length > 0) {
+    conditions.push(`category::text = ANY($${idx++})`);
+    params.push(occasionCategories);
   }
 
-  let [{ data: products, count }, banners] = await Promise.all([productsPromise, bannersPromise]);
-
-  let isFuzzyFallback = false;
-
-  // --- Execute Relaxed Fallback (if needed) ---
-  if ((!products || products.length === 0) && filters.searchTerm && !hasExplicitFilters) {
-    // Only fallback if we relied on text search and got nothing
-    // And we didn't have explicit filters (which user might expect strictness on)
-    const relaxedQuery = buildQuery(filters, true); // isRelaxed = true
-    const { data: relaxedProducts, error: relaxedError, count: relaxedCount } = await relaxedQuery
-      .range(offset, offset + l - 1)
-      .order('popularity', { ascending: false });
-
-    if (!relaxedError && relaxedProducts?.length > 0) {
-      products = relaxedProducts;
-      count = relaxedCount;
-      isFuzzyFallback = true;
-    }
+  if (appliedSubcategory) {
+    conditions.push(`subcategory::text ILIKE $${idx++}`);
+    params.push(`%${appliedSubcategory}%`);
   }
 
-  return {
-    products: products || [],
-    banners,
-    total: count || 0,
-    page: p,
-    limit: l,
-    totalPages: Math.ceil((count || 0) / l),
-    searchMode: isFuzzyFallback ? 'fuzzy_fallback' : searchMode,
-    filters: {
-      appliedCategory: appliedCategory || null,
-      appliedSubcategory: filters.subcategory || subcategory || null,
-      appliedColor: filters.color || color || null,
-      appliedSort: sort,
-      appliedStyle: filters.style || null,
-      appliedCategories: filters.categories || [],
-      searchType: hasExplicitFilters ? 'explicit' :
-        filters.isSubcategoryMatch ? 'subcategory' :
-          filters.isDirectCategoryMatch ? 'category' :
-            filters.isStyleSearch ? 'style' :
-              query ? 'text' : 'browse'
-    },
-    metadata: {
-      query,
-      explicitFilters: { category, subcategory, color, brand },
-      parsedFilters: searchMode === 'smart' ? filters : null,
-      isFuzzyMatch: isFuzzyFallback
-    }
-  };
+  if (appliedColor) {
+    conditions.push(`color ILIKE $${idx++}`);
+    params.push(`%${appliedColor}%`);
+  }
+
+  if (appliedBrand) {
+    conditions.push(`brand ILIKE $${idx++}`);
+    params.push(`%${appliedBrand}%`);
+  }
+
+  const tagIdx = idx++;
+  params.push(semanticTags.length > 0 ? semanticTags : ['__none__']);
+
+  let searchCondition = '';
+  let ranking = 'popularity';
+
+  if (query && query.length > 1) {
+    const queryIdx = idx++;
+    const patternIdx = idx++;
+    params.push(query, `%${query}%`);
+
+    searchCondition = `AND (
+      search_vector @@ plainto_tsquery('english', $${queryIdx})
+      OR semantic_tags && $${tagIdx}
+      OR name ILIKE $${patternIdx}
+      OR brand ILIKE $${patternIdx}
+      OR category::text ILIKE $${patternIdx}
+      OR subcategory::text ILIKE $${patternIdx}
+    )`;
+
+    ranking = `(
+      CASE WHEN search_vector @@ plainto_tsquery('english', $${queryIdx}) THEN 5 ELSE 0 END +
+      CASE WHEN semantic_tags && $${tagIdx} THEN 3 ELSE 0 END +
+      CASE WHEN name ILIKE $${patternIdx} THEN 4 ELSE 0 END +
+      CASE WHEN brand ILIKE $${patternIdx} THEN 2 ELSE 0 END +
+      CASE WHEN category::text ILIKE $${patternIdx} THEN 2 ELSE 0 END +
+      popularity * 0.1
+    )`;
+  }
+
+  const orderBy = sort === 'price_asc' ? 'price ASC'
+    : sort === 'price_desc' ? 'price DESC'
+      : sort === 'newest' ? 'created_at DESC'
+        : 'score DESC';
+
+  params.push(limit, offset);
+  const limitIdx = idx++;
+  const offsetIdx = idx++;
+
+  const sqlQuery = `
+    SELECT *, ${ranking} AS score, COUNT(*) OVER() as full_count
+    FROM products
+    WHERE ${conditions.join(' AND ')} ${searchCondition}
+    ORDER BY ${orderBy}
+    LIMIT $${limitIdx} OFFSET $${offsetIdx}
+  `;
+
+  let results = await sql(sqlQuery, params);
+
+  if (results.length === 0 && query && query.length > 2) {
+    results = await fuzzySearch(query, appliedCategory, appliedColor, limit, offset);
+  }
+
+  return results;
 };
 
-export const smartSearch = async ({ query, page = 1, limit = PAGINATION.DEFAULT_LIMIT }) => {
-  const p = Number.isInteger(Number(page)) && Number(page) > 0 ? Number(page) : 1;
-  const l = Math.max(1, Math.min(Number.isInteger(Number(limit)) ? Number(limit) : PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT));
-  return unifiedSearch({ query, page: p, limit: l });
+const fuzzySearch = async (query, category, color, limit, offset) => {
+  const pattern = `%${query}%`;
+  const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+
+  let filters = '';
+  const params = [pattern, limit, offset];
+  let paramIdx = 4;
+
+  if (category) {
+    filters += ` AND category::text ILIKE $${paramIdx++}`;
+    params.push(`%${category}%`);
+  }
+  if (color) {
+    filters += ` AND color ILIKE $${paramIdx++}`;
+    params.push(`%${color}%`);
+  }
+
+  let results = await sql(`
+    SELECT *, popularity AS score, COUNT(*) OVER() as full_count
+    FROM products
+    WHERE is_active = true
+      AND (name ILIKE $1 OR brand ILIKE $1 OR description ILIKE $1)
+      ${filters}
+    ORDER BY popularity DESC
+    LIMIT $2 OFFSET $3
+  `, params);
+
+  if (results.length === 0 && words.length > 0) {
+    const wordPatterns = words.map(w => `%${w}%`);
+    const wordConditions = wordPatterns.map((_, i) => `(name ILIKE $${i + 1} OR description ILIKE $${i + 1})`).join(' OR ');
+
+    results = await sql(`
+      SELECT *, popularity AS score, COUNT(*) OVER() as full_count
+      FROM products
+      WHERE is_active = true AND (${wordConditions})
+      ORDER BY popularity DESC
+      LIMIT $${words.length + 1} OFFSET $${words.length + 2}
+    `, [...wordPatterns, limit, offset]);
+  }
+
+  return results;
 };
+
+// ============================================================================
+// HYBRID SEARCH (pgvector + Text + Filters)
+// ============================================================================
+
+export const hybridSearch = async (params) => {
+  const { query, embedding, category, subcategory, color, brand, sort, page = 1, limit = 20 } = params;
+  const offset = (page - 1) * limit;
+
+  if (!query || query.length < 2) {
+    return { products: [], total: 0, page, limit, totalPages: 0, searchMode: 'empty' };
+  }
+
+  const hasEmbedding = embedding && Array.isArray(embedding) && embedding.length === 384;
+
+  if (!hasEmbedding) {
+    return unifiedSearch(params);
+  }
+
+  const vectorStr = `[${embedding.join(',')}]`;
+
+  const orderBy = sort === 'price_asc' ? 'p.price ASC'
+    : sort === 'price_desc' ? 'p.price DESC'
+      : sort === 'newest' ? 'p.created_at DESC'
+        : 'combined_score DESC';
+
+  // Build unified sqlParams: $1=vector, $2=query, $3+=filters, then limit/offset
+  const sqlParams = [vectorStr, query];
+  const vectorConditions = ['embedding IS NOT NULL', 'is_active = true'];
+  const textConditions = ['is_active = true'];
+  let paramIdx = 3;
+
+  if (category) {
+    vectorConditions.push(`category::text ILIKE $${paramIdx}`);
+    textConditions.push(`category::text ILIKE $${paramIdx}`);
+    sqlParams.push(`%${category}%`);
+    paramIdx++;
+  }
+  if (color) {
+    vectorConditions.push(`LOWER(color) = LOWER($${paramIdx})`);
+    textConditions.push(`LOWER(color) = LOWER($${paramIdx})`);
+    sqlParams.push(color);
+    paramIdx++;
+  }
+  if (brand) {
+    vectorConditions.push(`brand ILIKE $${paramIdx}`);
+    textConditions.push(`brand ILIKE $${paramIdx}`);
+    sqlParams.push(`%${brand}%`);
+    paramIdx++;
+  }
+
+  const limitIdx = paramIdx;
+  const offsetIdx = paramIdx + 1;
+  sqlParams.push(limit, offset);
+
+  try {
+    const sqlQuery = `
+      WITH vector_scores AS (
+        SELECT id, 1 - (embedding <=> $1::vector) AS vector_score
+        FROM products
+        WHERE ${vectorConditions.join(' AND ')}
+        ORDER BY embedding <=> $1::vector
+        LIMIT 100
+      ),
+      text_scores AS (
+        SELECT id, ts_rank(search_vector, plainto_tsquery('english', $2)) AS text_score
+        FROM products
+        WHERE search_vector @@ plainto_tsquery('english', $2)
+          AND ${textConditions.join(' AND ')}
+      )
+      SELECT 
+        p.*,
+        COALESCE(v.vector_score, 0) * 0.6 + 
+        COALESCE(t.text_score, 0) * 0.3 + 
+        COALESCE(p.popularity, 0) * 0.001 AS combined_score,
+        COUNT(*) OVER() as full_count
+      FROM products p
+      LEFT JOIN vector_scores v ON p.id = v.id
+      LEFT JOIN text_scores t ON p.id = t.id
+      WHERE p.is_active = true
+        AND (v.id IS NOT NULL OR t.id IS NOT NULL)
+      ORDER BY ${orderBy}
+      LIMIT $${limitIdx} OFFSET $${offsetIdx}
+    `;
+
+    const results = await sql(sqlQuery, sqlParams);
+    const total = results.length > 0 ? parseInt(results[0].full_count || 0) : 0;
+
+    return {
+      products: results,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      searchMode: 'hybrid',
+      filters: { appliedCategory: category, appliedSubcategory: subcategory, appliedColor: color, appliedBrand: brand },
+      metadata: { query, hasVectorSearch: true },
+    };
+  } catch (error) {
+    logger.error('Hybrid search error', error);
+    return unifiedSearch(params);
+  }
+};
+
+export const smartSearch = unifiedSearch;
+export const advancedSearch = unifiedSearch;
 
 export const getSearchSuggestions = async (partialQuery) => {
-  if (!partialQuery || partialQuery.trim().length < 2) {
-    return { categories: [], colors: [], styles: [], products: [], top_queries: [] };
-  }
+  if (!partialQuery?.trim() || partialQuery.length < 2) return { products: [] };
 
-  const normalizedQuery = partialQuery.toLowerCase().trim();
-  const suggestions = {
-    top_queries: [],
-    categories: [],
-    colors: [],
-    styles: [],
-    products: []
-  };
+  const term = `%${partialQuery.toLowerCase()}%`;
+  const products = await sql(
+    `SELECT DISTINCT name FROM products WHERE is_active = true AND (name ILIKE $1 OR brand ILIKE $1) ORDER BY popularity DESC LIMIT 5`,
+    [term]
+  );
 
-  // 1. Parse the query to see what we already understand
-  const parsed = parseSearchQuery(partialQuery);
-
-  // 2. Fetch relevant products to generate "Predictive Queries" based on actual inventory
-  try {
-    // Use proper prefix matching syntax with raw FTS filter
-    // Each word gets prefix matching: 'word':* format
-    const cleanQuery = normalizedQuery.replace(/[|&:*!']/g, ' ').trim();
-    const prefixQuery = cleanQuery.split(/\s+/)
-      .filter(w => w.length > 0)
-      .map(w => `'${w.replace(/'/g, "''")}':*`)
-      .join(' & ');
-
-    const { data: products } = await supabaseAdmin
-      .from('products')
-      .select('name, brand, category, subcategory, color, popularity')
-      .filter('search_vector', 'fts', prefixQuery || `'${normalizedQuery}':*`)
-      .order('popularity', { ascending: false })
-      .limit(20); // Fetch enough to find patterns
-
-    if (products?.length) {
-      // A. Generate Product Suggestions (Names/Brands)
-      const names = new Set();
-      products.forEach(p => {
-        if (p.name) names.add(p.name);
-      });
-      suggestions.products = Array.from(names).slice(0, 5);
-
-      // B. Generate Predictive "Top Queries"
-      // We look for common patterns in the results:
-      // - "{Color} {Subcategory}" (e.g., "Black Hoodies")
-      // - "{Brand} {Subcategory}" (e.g., "Nike Shoes")
-      // - "{Subcategory}" (if query matches prefix)
-
-      const patterns = new Map();
-
-      products.forEach(p => {
-        const sub = p.subcategory || p.category;
-        if (!sub) return;
-
-        // Pattern 1: Color + Subcategory
-        if (p.color) {
-          const query = `${p.color} ${sub}`;
-          // Only suggest if it adds value to the user's current input
-          // or if the user's input matches part of it
-          if (query.toLowerCase().includes(normalizedQuery) || isFuzzyMatch(query, normalizedQuery)) {
-            patterns.set(query, (patterns.get(query) || 0) + p.popularity);
-          }
-        }
-
-        // Pattern 2: Brand + Subcategory
-        if (p.brand) {
-          const query = `${p.brand} ${sub}`;
-          if (query.toLowerCase().includes(normalizedQuery)) {
-            patterns.set(query, (patterns.get(query) || 0) + p.popularity);
-          }
-        }
-
-        // Pattern 3: Just Subcategory (if it matches query prefix)
-        if (sub.toLowerCase().includes(normalizedQuery)) {
-          patterns.set(sub, (patterns.get(sub) || 0) + p.popularity);
-        }
-      });
-
-      // Sort patterns by score (popularity sum)
-      const sortedPatterns = Array.from(patterns.entries())
-        .sort((a, b) => b[1] - a[1])
-        .map(entry => entry[0])
-        .slice(0, 3);
-
-      suggestions.top_queries = sortedPatterns.map(q => ({
-        query: q,
-        label: q // Simple label for now
-      }));
-    }
-  } catch (err) {
-    logger.error(`Suggestion fetch failed: ${err.message}`);
-  }
-
-  // 3. Fallback: If no dynamic patterns found, use the parsed query construction
-  if (suggestions.top_queries.length === 0) {
-    const parts = [];
-    if (parsed.brand) parts.push(parsed.brand);
-    if (parsed.color) parts.push(parsed.color);
-    if (parsed.subcategory) parts.push(parsed.subcategory);
-    else if (parsed.category) parts.push(parsed.category);
-    if (parsed.searchTerm) parts.push(parsed.searchTerm);
-
-    const constructedQuery = parts.join(' ');
-    if (constructedQuery && constructedQuery.toLowerCase() !== normalizedQuery) {
-      suggestions.top_queries.push({
-        query: constructedQuery,
-        label: constructedQuery
-      });
-    }
-  }
-
-  // 4. Static Data Suggestions (Fuzzy) - Keep these for categorization
-  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    if (keywords.some(kw => isFuzzyMatch(normalizedQuery, kw))) {
-      if (!suggestions.categories.includes(category)) suggestions.categories.push(category);
-    }
-  }
-
-  for (const [color, variations] of Object.entries(COLOR_KEYWORDS)) {
-    if (variations.some(v => isFuzzyMatch(normalizedQuery, v))) {
-      if (!suggestions.colors.includes(color)) suggestions.colors.push(color);
-    }
-  }
-
-  return suggestions;
-};
-
-export const advancedSearch = async ({
-  query = null,
-  category = null,
-  subcategory = null,
-  color = null,
-  minPrice = null,
-  maxPrice = null,
-  brand = null,
-  page = 1,
-  limit = PAGINATION.DEFAULT_LIMIT
-}) => {
-  const p = Number.isInteger(Number(page)) && Number(page) > 0 ? Number(page) : 1;
-  const l = Math.max(1, Math.min(Number.isInteger(Number(limit)) ? Number(limit) : PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT));
-  const offset = (p - 1) * l;
-
-  let dbQuery = supabaseAdmin
-    .from('products')
-    .select('id, name, description, price, brand, images, category, subcategory, color, affiliate_link, popularity, clicks, created_at', { count: 'exact' });
-
-  if (category) dbQuery = dbQuery.eq('category', category);
-  if (subcategory) dbQuery = dbQuery.eq('subcategory', subcategory);
-  if (color) dbQuery = dbQuery.eq('color', color);
-  if (brand) dbQuery = dbQuery.ilike('brand', `%${brand}%`); // Brand usually doesn't have FTS index, keep ilike or use FTS if indexed
-  if (minPrice) dbQuery = dbQuery.gte('price', minPrice);
-  if (maxPrice) dbQuery = dbQuery.lte('price', maxPrice);
-
-  if (query?.trim()) {
-    // Clean and normalize - preserve apostrophes for brand names like "POND'S"
-    const cleanTerm = query.replace(/[|&:*!()]/g, ' ').trim();
-    if (cleanTerm) {
-      const words = cleanTerm.split(/\s+/).filter(w => w.length > 0);
-      if (words.length > 0) {
-        const formattedQuery = words.map(w => `'${w.replace(/'/g, "''")}':*`).join(' & ');
-        dbQuery = dbQuery.filter('search_vector', 'fts', formattedQuery);
-      }
-    }
-  }
-
-  dbQuery = dbQuery
-    .range(offset, offset + l - 1)
-    .order('popularity', { ascending: false })
-    .order('created_at', { ascending: false });
-
-  const { data, error, count } = await dbQuery;
-
-  if (error) {
-    throw new Error(`Advanced search failed: ${error.message}`);
-  }
-
-  return {
-    products: data || [],
-    total: count || 0,
-    page: p,
-    limit: l,
-    totalPages: Math.ceil((count || 0) / l),
-    appliedFilters: {
-      query,
-      category,
-      subcategory,
-      color,
-      brand,
-      priceRange: minPrice || maxPrice ? { min: minPrice, max: maxPrice } : null
-    }
-  };
+  return { products: products.map(p => p.name), categories: [], colors: [], styles: [] };
 };

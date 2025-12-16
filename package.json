@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node -r dotenv/config --watch src/index.js",
+    "migrate:check": "node scripts/pre-migration-check.js",
+    "migrate:supabase-to-neon": "node scripts/migrate-supabase-to-neon.js"
   },
   "keywords": [
     "fashion",
@@ -17,9 +19,10 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "@supabase/supabase-js": "^2.39.0",
+    "@aws-sdk/client-s3": "^3.948.0",
+    "@neondatabase/serverless": "^1.0.2",
     "@upstash/redis": "^1.35.8",
-    "cloudinary": "^2.7.0",
+    "better-auth": "^1.4.7",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
@@ -28,10 +31,10 @@
     "firebase-admin": "^13.6.0",
     "helmet": "^7.1.0",
     "multer": "^2.0.2",
+    "node-fetch": "^3.3.2",
+    "pg": "^8.13.1",
+    "sharp": "^0.34.5",
     "winston": "^3.18.3",
     "zod": "^3.22.4"
-  },
-  "devDependencies": {
-    "supabase": "^2.67.1"
   }
 }

@@ -5,13 +5,15 @@ import {
   unifiedSearchSchema,
   smartSearchSchema,
   advancedSearchSchema,
-  searchSuggestionsSchema
+  searchSuggestionsSchema,
+  unifiedSearchPostSchema
 } from '../validators/search.validators.js';
 import { generalLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
 router.get('/', generalLimiter, validate(unifiedSearchSchema), searchController.unifiedSearch);
+router.post('/', generalLimiter, validate(unifiedSearchPostSchema), searchController.unifiedSearch);
 router.get('/smart', generalLimiter, validate(smartSearchSchema), searchController.smartSearch);
 router.get('/advanced', generalLimiter, validate(advancedSearchSchema), searchController.advancedSearch);
 router.get('/suggestions', generalLimiter, validate(searchSuggestionsSchema), searchController.getSearchSuggestions);

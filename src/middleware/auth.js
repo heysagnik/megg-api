@@ -1,23 +1,19 @@
-import { supabase } from '../config/supabase.js';
+import { auth } from '../config/auth.js';
+import { fromNodeHeaders } from 'better-auth/node';
 import { UnauthorizedError, ForbiddenError } from '../utils/errors.js';
 
 export const authenticate = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
+    const session = await auth.api.getSession({
+      headers: fromNodeHeaders(req.headers)
+    });
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new UnauthorizedError('No token provided');
-    }
-
-    const token = authHeader.substring(7);
-
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-
-    if (error || !user) {
+    if (!session) {
       throw new UnauthorizedError('Invalid or expired token');
     }
 
-    req.user = user;
+    req.user = session.user;
+    req.session = session.session;
     next();
   } catch (error) {
     next(error);
@@ -26,17 +22,14 @@ export const authenticate = async (req, res, next) => {
 
 export const optionalAuth = async (req, res, next) => {
   try {
-    const authHeader = req.headers.authorization;
+    const session = await auth.api.getSession({
+      headers: fromNodeHeaders(req.headers)
+    });
 
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      const { data: { user } } = await supabase.auth.getUser(token);
-
-      if (user) {
-        req.user = user;
-      }
+    if (session) {
+      req.user = session.user;
+      req.session = session.session;
     }
-
     next();
   } catch (error) {
     next();
@@ -60,4 +53,3 @@ export const requireAdmin = async (req, res, next) => {
     next(error);
   }
 };
-
