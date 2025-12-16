@@ -83,8 +83,8 @@ export const auth = betterAuth({
             session_token: {
                 name: "better-auth.session_token",
                 attributes: {
-                    sameSite: "none",
-                    secure: true,
+                    sameSite: "lax", // Can use 'lax' now since same-origin
+                    secure: process.env.NODE_ENV === 'production',
                     httpOnly: true,
                     path: "/",
                 }
@@ -92,8 +92,8 @@ export const auth = betterAuth({
             state: {
                 name: "better-auth.state",
                 attributes: {
-                    sameSite: "none",
-                    secure: true,
+                    sameSite: "lax",
+                    secure: process.env.NODE_ENV === 'production',
                     httpOnly: true,
                     path: "/",
                     maxAge: 60 * 10,
