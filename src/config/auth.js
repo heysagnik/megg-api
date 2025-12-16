@@ -89,7 +89,7 @@ export const auth = betterAuth({
     advanced: {
         generateId: () => randomUUID(),
         crossSubDomainCookies: {
-            enabled: false,
+            enabled: true,
         },
         cookies: {
             state: {
