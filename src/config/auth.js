@@ -79,16 +79,12 @@ export const auth = betterAuth({
 
     advanced: {
         generateId: undefined,
-        crossSubDomainCookies: {
-            enabled: false,
-            domain: process.env.COOKIE_DOMAIN || undefined,
-        },
         cookies: {
             session_token: {
                 name: "better-auth.session_token",
                 attributes: {
                     sameSite: "none",
-                    secure: true, 
+                    secure: true,
                     httpOnly: true,
                     path: "/",
                 }
@@ -96,11 +92,11 @@ export const auth = betterAuth({
             oauth_state: {
                 name: "better-auth.oauth_state",
                 attributes: {
-                    sameSite: "none", 
-                    secure: true, 
+                    sameSite: "none",
+                    secure: true,
                     httpOnly: true,
                     path: "/",
-                    maxAge: 60 * 10, 
+                    maxAge: 60 * 10,
                 }
             },
         },
