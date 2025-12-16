@@ -22,14 +22,13 @@ export const auth = betterAuth({
     secret: process.env.BETTER_AUTH_SECRET,
     baseURL: process.env.BASE_URL || "http://localhost:3000",
 
-    // Trusted origins for CORS
     trustedOrigins: [
         "http://localhost:5173",
         "http://localhost:3000",
+        "https://megg-admin.vercel.app",
         process.env.FRONTEND_URL
     ].filter(Boolean),
 
-    // Session configuration
     session: {
         expiresIn: 60 * 60 * 24 * 7,
         updateAge: 60 * 60 * 24,
@@ -50,21 +49,16 @@ export const auth = betterAuth({
         },
     },
 
-    // Social providers
     socialProviders: {
         google: {
             clientId: process.env.GOOGLE_CLIENT_ID,
             clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-            // Scopes for user info
             scope: ["openid", "email", "profile"],
-            // Enable account linking
             autoLinkAccounts: true,
         }
     },
 
-    // User table configuration
     user: {
-        // Additional fields you want to store
         additionalFields: {
             phoneNumber: {
                 type: "string",
@@ -86,17 +80,30 @@ export const auth = betterAuth({
     advanced: {
         generateId: undefined,
         crossSubDomainCookies: {
-            enabled: true,
+            enabled: false,
+            domain: process.env.COOKIE_DOMAIN || undefined,
         },
         cookies: {
-            state: {
+            session_token: {
+                name: "better-auth.session_token",
                 attributes: {
                     sameSite: "none",
-                    secure: true,
+                    secure: true, 
+                    httpOnly: true,
+                    path: "/",
                 }
-            }
+            },
+            oauth_state: {
+                name: "better-auth.oauth_state",
+                attributes: {
+                    sameSite: "none", 
+                    secure: true, 
+                    httpOnly: true,
+                    path: "/",
+                    maxAge: 60 * 10, 
+                }
+            },
         },
-
         useSecureCookies: process.env.NODE_ENV === 'production',
     },
     rateLimit: {
