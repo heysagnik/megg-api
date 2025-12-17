@@ -1,18 +1,17 @@
 import express from 'express';
 import * as uploadController from '../controllers/upload.controller.js';
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { apiKeyAuth } from '../middleware/apiKeyAuth.js';
 import { uploadVideoHandler, uploadImages } from '../middleware/upload.js';
 import { adminLimiter } from '../middleware/rateLimiter.js';
-
 import { uploadVideoSchema, uploadImageSchema } from '../validators/upload.validators.js';
 import { validate } from '../middleware/validate.js';
 
 const router = express.Router();
 
+// Admin routes (API key required)
 router.post(
   '/video',
-  authenticate,
-  requireAdmin,
+  apiKeyAuth,
   adminLimiter,
   uploadVideoHandler,
   validate(uploadVideoSchema),
@@ -21,8 +20,7 @@ router.post(
 
 router.post(
   '/image',
-  authenticate,
-  requireAdmin,
+  apiKeyAuth,
   adminLimiter,
   uploadImages.single('image'),
   validate(uploadImageSchema),
@@ -30,4 +28,3 @@ router.post(
 );
 
 export default router;
-

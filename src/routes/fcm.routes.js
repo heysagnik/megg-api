@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import * as fcmController from '../controllers/fcm.controller.js';
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { apiKeyAuth } from '../middleware/apiKeyAuth.js';
 
 const router = Router();
 
-// Send notification to all users (Admin only)
-router.post('/send', authenticate, requireAdmin, fcmController.sendNotification);
-
-// Get all sent notifications (Public)
+// Public routes
 router.get('/', fcmController.getNotifications);
+
+// Admin routes (API key required)
+router.post('/send', apiKeyAuth, fcmController.sendNotification);
 
 export default router;

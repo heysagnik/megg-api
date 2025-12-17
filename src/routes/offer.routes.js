@@ -1,6 +1,6 @@
 import express from 'express';
 import * as offerController from '../controllers/offer.controller.js';
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { apiKeyAuth } from '../middleware/apiKeyAuth.js';
 import { validate } from '../middleware/validate.js';
 import {
   listOffersSchema,
@@ -13,12 +13,13 @@ import { uploadImages } from '../middleware/upload.js';
 
 const router = express.Router();
 
+// Public routes
 router.get('/', generalLimiter, validate(listOffersSchema), offerController.listOffers);
 router.get('/:id', generalLimiter, validate(offerIdSchema), offerController.getOffer);
 
-router.post('/', authenticate, requireAdmin, adminLimiter, uploadImages.single('banner_image'), validate(createOfferSchema), offerController.createOffer);
-router.put('/:id', authenticate, requireAdmin, adminLimiter, uploadImages.single('banner_image'), validate(updateOfferSchema), offerController.updateOffer);
-router.delete('/:id', authenticate, requireAdmin, adminLimiter, validate(offerIdSchema), offerController.deleteOffer);
+// Admin routes (API key required)
+router.post('/', apiKeyAuth, adminLimiter, uploadImages.single('banner_image'), validate(createOfferSchema), offerController.createOffer);
+router.put('/:id', apiKeyAuth, adminLimiter, uploadImages.single('banner_image'), validate(updateOfferSchema), offerController.updateOffer);
+router.delete('/:id', apiKeyAuth, adminLimiter, validate(offerIdSchema), offerController.deleteOffer);
 
 export default router;
-

@@ -1,12 +1,15 @@
 import { Router } from 'express';
 import * as notificationController from '../controllers/notification.controller.js';
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { apiKeyAuth } from '../middleware/apiKeyAuth.js';
 
 const router = Router();
 
-router.post('/', authenticate, requireAdmin, notificationController.createNotification);
+// Public routes
 router.get('/', notificationController.listNotifications);
 router.get('/:id', notificationController.getNotificationById);
-router.delete('/:id', authenticate, requireAdmin, notificationController.deleteNotification);
+
+// Admin routes (API key required)
+router.post('/', apiKeyAuth, notificationController.createNotification);
+router.delete('/:id', apiKeyAuth, notificationController.deleteNotification);
 
 export default router;

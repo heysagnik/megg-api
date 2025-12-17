@@ -1,6 +1,6 @@
 import express from 'express';
 import * as bannerController from '../controllers/banner.controller.js';
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { apiKeyAuth } from '../middleware/apiKeyAuth.js';
 import { validate } from '../middleware/validate.js';
 import { uploadBannerHandler } from '../middleware/upload.js';
 import {
@@ -12,30 +12,29 @@ import { generalLimiter, adminLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
+// Public routes
 router.get('/', generalLimiter, bannerController.listBanners);
 router.get('/:id', generalLimiter, validate(bannerIdSchema), bannerController.getBanner);
 
+// Admin routes (API key required)
 router.post(
-  '/', 
-  authenticate, 
-  requireAdmin, 
-  adminLimiter, 
+  '/',
+  apiKeyAuth,
+  adminLimiter,
   uploadBannerHandler,
-  validate(createBannerSchema), 
+  validate(createBannerSchema),
   bannerController.createBanner
 );
 
 router.put(
-  '/:id', 
-  authenticate, 
-  requireAdmin, 
-  adminLimiter, 
+  '/:id',
+  apiKeyAuth,
+  adminLimiter,
   uploadBannerHandler,
-  validate(updateBannerSchema), 
+  validate(updateBannerSchema),
   bannerController.updateBanner
 );
 
-router.delete('/:id', authenticate, requireAdmin, adminLimiter, validate(bannerIdSchema), bannerController.deleteBanner);
+router.delete('/:id', apiKeyAuth, adminLimiter, validate(bannerIdSchema), bannerController.deleteBanner);
 
 export default router;
-

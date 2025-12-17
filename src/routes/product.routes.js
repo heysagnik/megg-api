@@ -1,6 +1,6 @@
 import express from 'express';
 import * as productController from '../controllers/product.controller.js';
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { apiKeyAuth } from '../middleware/apiKeyAuth.js';
 import { validate } from '../middleware/validate.js';
 import {
   listProductsSchema,
@@ -16,6 +16,7 @@ import { sequentialWrite } from '../middleware/queue.js';
 
 const router = express.Router();
 
+// Public routes (no auth required)
 router.get('/', generalLimiter, validate(listProductsSchema), productController.listProducts);
 router.get('/browse/:category', generalLimiter, validate(browseCategorySchema), productController.browseByCategory);
 router.get('/:id', generalLimiter, validate(productIdSchema), productController.getProduct);
@@ -24,10 +25,10 @@ router.get('/:id/related', generalLimiter, validate(productIdSchema), productCon
 router.get('/:id/variants', generalLimiter, validate(productIdSchema), productController.getColorVariants);
 router.get('/:id/recommendations', generalLimiter, validate(productIdSchema), productController.getRecommendedFromSubcategory);
 
-router.post('/upload-images', authenticate, requireAdmin, adminLimiter, uploadImagesHandler, productController.uploadProductImages);
-router.post('/', authenticate, requireAdmin, adminLimiter, sequentialWrite, uploadImagesHandler, validate(createProductWithFilesSchema), productController.createProduct);
-router.put('/:id', authenticate, requireAdmin, adminLimiter, sequentialWrite, uploadImagesHandler, normalizeProductUpdateData, validate(updateProductSchema), productController.updateProduct);
-router.delete('/:id', authenticate, requireAdmin, adminLimiter, sequentialWrite, validate(productIdSchema), productController.deleteProduct);
+// Admin routes (API key required)
+router.post('/upload-images', apiKeyAuth, adminLimiter, uploadImagesHandler, productController.uploadProductImages);
+router.post('/', apiKeyAuth, adminLimiter, sequentialWrite, uploadImagesHandler, validate(createProductWithFilesSchema), productController.createProduct);
+router.put('/:id', apiKeyAuth, adminLimiter, sequentialWrite, uploadImagesHandler, normalizeProductUpdateData, validate(updateProductSchema), productController.updateProduct);
+router.delete('/:id', apiKeyAuth, adminLimiter, sequentialWrite, validate(productIdSchema), productController.deleteProduct);
 
 export default router;
-
