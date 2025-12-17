@@ -33,7 +33,8 @@ const validatePagination = (pageStr, limitStr) => {
 
 app.route('/api/auth', auth);
 app.route('/api/wishlist', wishlist);
-app.route('/api/search', search);
+// Search is proxied to Vercel due to SQL compatibility issues
+// app.route('/api/search', search);
 
 app.get('/api/health', (c) => c.json({ status: 'ok', service: 'workers', timestamp: new Date().toISOString() }));
 
@@ -341,6 +342,85 @@ app.all('/api/admin/*', async (c) => {
   } catch (error) {
     console.error('Admin proxy error:', error.message);
     return c.json({ error: 'Admin service unavailable' }, 502);
+  }
+});
+
+app.all('/api/outfits', async (c) => {
+  try {
+    const vercelUrl = c.env.ORIGIN_URL + c.req.path + (c.req.url.includes('?') ? '?' + c.req.url.split('?')[1] : '');
+    const response = await fetch(vercelUrl, {
+      method: c.req.method,
+      headers: c.req.raw.headers,
+    });
+    const data = await response.json();
+    return c.json(data, response.status);
+  } catch (error) {
+    console.error('Outfits proxy error:', error.message);
+    return c.json({ error: 'Outfits service unavailable' }, 502);
+  }
+});
+
+app.all('/api/outfits/:id', async (c) => {
+  try {
+    const vercelUrl = c.env.ORIGIN_URL + c.req.path;
+    const response = await fetch(vercelUrl, {
+      method: c.req.method,
+      headers: c.req.raw.headers,
+    });
+    const data = await response.json();
+    return c.json(data, response.status);
+  } catch (error) {
+    console.error('Outfits proxy error:', error.message);
+    return c.json({ error: 'Outfits service unavailable' }, 502);
+  }
+});
+
+// Proxy FCM to Vercel
+app.all('/api/fcm', async (c) => {
+  try {
+    const vercelUrl = c.env.ORIGIN_URL + c.req.path;
+    const response = await fetch(vercelUrl, {
+      method: c.req.method,
+      headers: c.req.raw.headers,
+    });
+    const data = await response.json();
+    return c.json(data, response.status);
+  } catch (error) {
+    console.error('FCM proxy error:', error.message);
+    return c.json({ error: 'FCM service unavailable' }, 502);
+  }
+});
+
+// Proxy notifications to Vercel
+app.all('/api/notifications', async (c) => {
+  try {
+    const vercelUrl = c.env.ORIGIN_URL + c.req.path;
+    const response = await fetch(vercelUrl, {
+      method: c.req.method,
+      headers: c.req.raw.headers,
+    });
+    const data = await response.json();
+    return c.json(data, response.status);
+  } catch (error) {
+    console.error('Notifications proxy error:', error.message);
+    return c.json({ error: 'Notifications service unavailable' }, 502);
+  }
+});
+
+// Proxy search to Vercel (complex SQL queries work better there)
+app.all('/api/search', async (c) => {
+  try {
+    const url = new URL(c.req.url);
+    const vercelUrl = c.env.ORIGIN_URL + '/api/search' + url.search;
+    const response = await fetch(vercelUrl, {
+      method: c.req.method,
+      headers: c.req.raw.headers,
+    });
+    const data = await response.json();
+    return c.json(data, response.status);
+  } catch (error) {
+    console.error('Search proxy error:', error.message);
+    return c.json({ error: 'Search service unavailable' }, 502);
   }
 });
 
