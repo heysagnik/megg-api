@@ -46,9 +46,7 @@ export const compressVideo = (inputPath, outputPath) => {
     });
 };
 
-/**
- * Generate high-quality thumbnail from video
- */
+
 export const generateThumbnail = (inputPath, outputPath) => {
     return new Promise((resolve, reject) => {
         ffmpeg(inputPath)
