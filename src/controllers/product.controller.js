@@ -2,23 +2,22 @@ import * as productService from '../services/product.service.js';
 import * as uploadService from '../services/upload.service.js';
 import * as searchService from '../services/search.service.js';
 
+const parseJsonField = (value) => {
+  if (!value || typeof value !== 'string') return value;
+  if (value === '') return undefined;
+  if (value.trim().startsWith('[') || value.trim().startsWith('{')) {
+    try { return JSON.parse(value); } catch { return value; }
+  }
+  return value;
+};
+
 export const uploadProductImages = async (req, res, next) => {
   try {
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'No images provided'
-      });
+    if (!req.files?.length) {
+      return res.status(400).json({ success: false, error: 'No images provided' });
     }
-
-    const imageUrls = await uploadService.uploadMultipleProductImages(req.files);
-
-    res.status(201).json({
-      success: true,
-      data: {
-        images: imageUrls
-      }
-    });
+    const images = await uploadService.uploadMultipleProductImages(req.files);
+    res.status(201).json({ success: true, data: { images } });
   } catch (error) {
     next(error);
   }
@@ -26,22 +25,12 @@ export const uploadProductImages = async (req, res, next) => {
 
 export const listProducts = async (req, res, next) => {
   try {
-    let result;
-    if (req.query.search) {
-      // Use unified search service for smart search capabilities
-      result = await searchService.unifiedSearch({
-        ...req.query,
-        query: req.query.search // Map 'search' param to 'query'
-      });
-    } else {
-      result = await productService.listProducts(req.query);
-    }
+    const result = req.query.search
+      ? await searchService.unifiedSearch({ ...req.query, query: req.query.search })
+      : await productService.listProducts(req.query);
 
     res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
-    res.json({
-      success: true,
-      data: result
-    });
+    res.json({ success: true, data: result });
   } catch (error) {
     next(error);
   }
@@ -53,12 +42,8 @@ export const browseByCategory = async (req, res, next) => {
       category: req.params.category,
       ...req.query
     });
-
     res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
-    res.json({
-      success: true,
-      data: result
-    });
+    res.json({ success: true, data: result });
   } catch (error) {
     next(error);
   }
@@ -67,12 +52,8 @@ export const browseByCategory = async (req, res, next) => {
 export const getProduct = async (req, res, next) => {
   try {
     const result = await productService.getProductById(req.params.id);
-
     res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
-    res.json({
-      success: true,
-      data: result
-    });
+    res.json({ success: true, data: result });
   } catch (error) {
     next(error);
   }
@@ -81,12 +62,8 @@ export const getProduct = async (req, res, next) => {
 export const getRelatedProducts = async (req, res, next) => {
   try {
     const products = await productService.getRelatedProducts(req.params.id);
-
     res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
-    res.json({
-      success: true,
-      data: products
-    });
+    res.json({ success: true, data: products });
   } catch (error) {
     next(error);
   }
@@ -94,36 +71,17 @@ export const getRelatedProducts = async (req, res, next) => {
 
 export const createProduct = async (req, res, next) => {
   try {
-    let productData = { ...req.body };
+    const productData = { ...req.body };
 
-    if (productData.price) {
-      productData.price = parseFloat(productData.price);
-    }
+    if (productData.price) productData.price = parseFloat(productData.price);
+    productData.fabric = parseJsonField(productData.fabric);
 
-    // Handle fabric - can be a plain string, JSON array string, or already an array
-    if (productData.fabric && typeof productData.fabric === 'string') {
-      try {
-        // Try to parse if it looks like JSON (starts with [ or {)
-        if (productData.fabric.trim().startsWith('[') || productData.fabric.trim().startsWith('{')) {
-          productData.fabric = JSON.parse(productData.fabric);
-        }
-        // Otherwise keep it as a plain string
-      } catch {
-        // If JSON parse fails, keep the original string value
-      }
-    }
-
-    if (req.files && req.files.length > 0) {
-      const imageUrls = await uploadService.uploadMultipleProductImages(req.files);
-      productData.images = imageUrls;
+    if (req.files?.length) {
+      productData.images = await uploadService.uploadMultipleProductImages(req.files);
     }
 
     const product = await productService.createProduct(productData);
-
-    res.status(201).json({
-      success: true,
-      data: product
-    });
+    res.status(201).json({ success: true, data: product });
   } catch (error) {
     next(error);
   }
@@ -132,47 +90,15 @@ export const createProduct = async (req, res, next) => {
 export const updateProduct = async (req, res, next) => {
   try {
     const updates = { ...req.body };
-    const files = req.files || [];
 
-    // Handle fabric - can be empty, plain string, or JSON array
-    if (updates.fabric !== undefined) {
-      if (updates.fabric === '' || updates.fabric === null) {
-        delete updates.fabric; // Don't update if empty
-      } else if (typeof updates.fabric === 'string') {
-        try {
-          if (updates.fabric.trim().startsWith('[')) {
-            updates.fabric = JSON.parse(updates.fabric);
-          }
-          // Otherwise keep as string, service will handle conversion
-        } catch {
-          // Keep original value
-        }
-      }
-    }
+    if (updates.fabric === '' || updates.fabric === null) delete updates.fabric;
+    else updates.fabric = parseJsonField(updates.fabric);
 
-    // Handle semantic_tags - ensure it's an array or remove if empty
-    if (updates.semantic_tags !== undefined) {
-      if (updates.semantic_tags === '' || updates.semantic_tags === null) {
-        delete updates.semantic_tags; // Don't update if empty
-      } else if (typeof updates.semantic_tags === 'string') {
-        try {
-          if (updates.semantic_tags.trim().startsWith('[')) {
-            updates.semantic_tags = JSON.parse(updates.semantic_tags);
-          } else if (updates.semantic_tags.trim() === '') {
-            delete updates.semantic_tags;
-          }
-        } catch {
-          delete updates.semantic_tags;
-        }
-      }
-    }
+    if (updates.semantic_tags === '' || updates.semantic_tags === null) delete updates.semantic_tags;
+    else updates.semantic_tags = parseJsonField(updates.semantic_tags);
 
-    const product = await productService.updateProduct(req.params.id, updates, files);
-
-    res.json({
-      success: true,
-      data: product
-    });
+    const product = await productService.updateProduct(req.params.id, updates, req.files || []);
+    res.json({ success: true, data: product });
   } catch (error) {
     next(error);
   }
@@ -181,11 +107,7 @@ export const updateProduct = async (req, res, next) => {
 export const deleteProduct = async (req, res, next) => {
   try {
     await productService.deleteProduct(req.params.id);
-
-    res.json({
-      success: true,
-      message: 'Product deleted successfully'
-    });
+    res.json({ success: true, message: 'Product deleted successfully' });
   } catch (error) {
     next(error);
   }
@@ -194,22 +116,17 @@ export const deleteProduct = async (req, res, next) => {
 export const trackProductClick = async (req, res, next) => {
   try {
     await productService.incrementProductClicks(req.params.id);
-    res.json({ success: true, message: 'Click tracked' });
+    res.json({ success: true });
   } catch (error) {
     next(error);
   }
 };
 
-
 export const getColorVariants = async (req, res, next) => {
   try {
     const variants = await productService.getColorVariants(req.params.id);
-
     res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
-    res.json({
-      success: true,
-      data: variants
-    });
+    res.json({ success: true, data: variants });
   } catch (error) {
     next(error);
   }
@@ -218,12 +135,8 @@ export const getColorVariants = async (req, res, next) => {
 export const getRecommendedFromSubcategory = async (req, res, next) => {
   try {
     const products = await productService.getRecommendedFromSubcategory(req.params.id);
-
     res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
-    res.json({
-      success: true,
-      data: products
-    });
+    res.json({ success: true, data: products });
   } catch (error) {
     next(error);
   }

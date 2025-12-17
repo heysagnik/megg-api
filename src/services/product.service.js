@@ -387,8 +387,7 @@ export const updateProduct = async (id, updates, newFiles = []) => {
 
     const normalizeUrl = (url) => {
       if (typeof url !== 'string') return '';
-      const cleaned = url.split('?')[0].trim();
-      return cleaned;
+      return url.split('?')[0].trim();
     };
 
     const normalizedKeptImages = keptImages.map(normalizeUrl);
@@ -402,10 +401,7 @@ export const updateProduct = async (id, updates, newFiles = []) => {
       );
     });
 
-    logger.info(`Image update: Current=${currentImages.length}, Kept=${keptImages.length}, ToDelete=${imagesToDelete.length}`);
-
     if (imagesToDelete.length > 0) {
-      logger.info(`Deleting images: ${JSON.stringify(imagesToDelete)}`);
       const { deleteMultipleProductImages } = await import('./upload.service.js');
       await deleteMultipleProductImages(imagesToDelete);
     }

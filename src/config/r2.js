@@ -23,47 +23,29 @@ export const uploadToR2 = async (key, body, contentType) => {
 };
 
 export const deleteFromR2 = async (url) => {
-    if (!url) return;
+    if (!url || typeof url !== 'string') return;
 
+    const cleanUrl = url.split('?')[0];
     let key;
-    if (typeof url === 'string') {
-        const cleanUrl = url.split('?')[0];
 
-        if (R2_PUBLIC_URL && cleanUrl.includes(R2_PUBLIC_URL)) {
-            key = cleanUrl.replace(`${R2_PUBLIC_URL}/`, '');
-        } else if (cleanUrl.startsWith('http')) {
-            try {
-                const urlObj = new URL(cleanUrl);
-                key = urlObj.pathname.replace(/^\//, '');
-            } catch {
-                console.error('Invalid URL for deletion:', url);
-                return;
-            }
-        } else {
-            key = cleanUrl;
+    if (R2_PUBLIC_URL && cleanUrl.includes(R2_PUBLIC_URL)) {
+        key = cleanUrl.replace(`${R2_PUBLIC_URL}/`, '');
+    } else if (cleanUrl.startsWith('http')) {
+        try {
+            key = new URL(cleanUrl).pathname.replace(/^\//, '');
+        } catch {
+            return;
         }
     } else {
-        console.error('deleteFromR2 received non-string:', typeof url);
-        return;
+        key = cleanUrl;
     }
 
-    if (!key) {
-        console.error('Could not extract key from URL:', url);
-        return;
-    }
+    if (!key) return;
 
-    console.log(`Deleting from R2: key=${key}`);
-
-    try {
-        await r2.send(new DeleteObjectCommand({
-            Bucket: R2_BUCKET,
-            Key: key
-        }));
-        console.log(`Successfully deleted from R2: ${key}`);
-    } catch (error) {
-        console.error(`Failed to delete from R2: ${key}`, error.message);
-        throw error;
-    }
+    await r2.send(new DeleteObjectCommand({
+        Bucket: R2_BUCKET,
+        Key: key
+    }));
 };
 
 export const getFromR2 = async (key) => {
