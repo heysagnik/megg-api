@@ -1,5 +1,5 @@
 import express from 'express';
-import authRoutes from './auth.routes.js';
+
 import productRoutes from './product.routes.js';
 import outfitRoutes from './outfit.routes.js';
 import colorComboRoutes from './colorCombo.routes.js';
@@ -16,7 +16,7 @@ import fcmRoutes from './fcm.routes.js';
 
 const router = express.Router();
 
-router.use('/account', authRoutes);
+
 router.use('/products', productRoutes);
 router.use('/search', searchRoutes);
 router.use('/outfits', outfitRoutes);

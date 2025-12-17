@@ -4,6 +4,7 @@ import helmet from 'helmet';
 import compression from 'compression';
 import dotenv from 'dotenv';
 import routes from './routes/index.js';
+import authRoutes from './routes/auth.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import logger from './utils/logger.js';
 
@@ -36,6 +37,7 @@ app.use(cors({
 // Better Auth handler MUST come BEFORE express.json()
 import { toNodeHandler } from 'better-auth/node';
 import { auth } from './config/auth.js';
+app.use('/api/auth', authRoutes);
 app.all(/^\/api\/auth(\/.*)?$/, toNodeHandler(auth));
 
 app.use(express.json({ limit: '10mb' }));
