@@ -100,8 +100,17 @@ export const createProduct = async (req, res, next) => {
       productData.price = parseFloat(productData.price);
     }
 
+    // Handle fabric - can be a plain string, JSON array string, or already an array
     if (productData.fabric && typeof productData.fabric === 'string') {
-      productData.fabric = JSON.parse(productData.fabric);
+      try {
+        // Try to parse if it looks like JSON (starts with [ or {)
+        if (productData.fabric.trim().startsWith('[') || productData.fabric.trim().startsWith('{')) {
+          productData.fabric = JSON.parse(productData.fabric);
+        }
+        // Otherwise keep it as a plain string
+      } catch {
+        // If JSON parse fails, keep the original string value
+      }
     }
 
     if (req.files && req.files.length > 0) {
