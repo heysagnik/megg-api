@@ -8,7 +8,7 @@ import { authLimiter } from '../middleware/rateLimiter.js';
 const router = express.Router();
 
 // Mobile Google Sign-In
-router.post('/mobile/google', authLimiter, validate(mobileGoogleAuthSchema), authController.mobileGoogleAuth);
+router.post('/mobile/google', express.json(), authLimiter, validate(mobileGoogleAuthSchema), authController.mobileGoogleAuth);
 
 // Session check
 router.get('/check', authController.checkSession);
