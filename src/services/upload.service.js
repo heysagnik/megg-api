@@ -119,9 +119,43 @@ export const deleteMultipleProductImages = async (images) => {
 
 export const uploadReelVideo = async (file, reelId) => {
   validateVideoFile(file);
-  const key = `reels/${reelId}/${Date.now()}_video.mp4`;
-  const url = await uploadToR2(key, file.buffer, 'video/mp4');
-  return { video_url: url, thumbnail_url: null, size: file.size };
+
+  const timestamp = Date.now();
+  const baseKey = `reels/${reelId}/${timestamp}`;
+
+  try {
+    // Try to process video (compress + thumbnail)
+    const { processVideo } = await import('../utils/videoProcessor.js');
+    const { videoBuffer, thumbnailBuffer } = await processVideo(file.buffer);
+
+    // Upload compressed video
+    const videoKey = `${baseKey}_video.mp4`;
+    const videoUrl = await uploadToR2(videoKey, videoBuffer, 'video/mp4');
+
+    // Upload thumbnail
+    const thumbKey = `${baseKey}_thumb.jpg`;
+    const thumbnailUrl = await uploadToR2(thumbKey, thumbnailBuffer, 'image/jpeg');
+
+    return {
+      video_url: videoUrl,
+      thumbnail_url: thumbnailUrl,
+      size: videoBuffer.length,
+      compressed: true
+    };
+  } catch (error) {
+    // Fallback: upload original video without compression
+    console.warn('Video processing failed, uploading original:', error.message);
+
+    const videoKey = `${baseKey}_video.mp4`;
+    const videoUrl = await uploadToR2(videoKey, file.buffer, 'video/mp4');
+
+    return {
+      video_url: videoUrl,
+      thumbnail_url: null,
+      size: file.size,
+      compressed: false
+    };
+  }
 };
 
 export const deleteReelVideo = async (videoUrl) => {

@@ -59,11 +59,20 @@ export const createReel = async (reelData) => {
   if (!validation.success) throw new ValidationError(validation.error.errors[0].message);
 
   const data = validation.data;
-  const keys = Object.keys(data);
-  const cols = keys.map(k => `"${k}"`).join(', ');
-  const vals = keys.map((_, i) => `$${i + 1}`).join(', ');
 
-  const [reel] = await sql(`INSERT INTO reels (${cols}) VALUES (${vals}) RETURNING *`, keys.map(k => data[k]));
+  // Ensure product_ids is properly formatted for PostgreSQL
+  if (data.product_ids && Array.isArray(data.product_ids)) {
+    data.product_ids = data.product_ids.filter(id => id && typeof id === 'string');
+  } else {
+    data.product_ids = [];
+  }
+
+  const [reel] = await sql(
+    `INSERT INTO reels (category, video_url, thumbnail_url, product_ids) 
+     VALUES ($1, $2, $3, $4) RETURNING *`,
+    [data.category, data.video_url || null, data.thumbnail_url || null, data.product_ids]
+  );
+
   if (!reel) throw new Error('Failed to create reel');
   return reel;
 };
