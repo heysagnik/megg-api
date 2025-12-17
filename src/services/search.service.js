@@ -190,8 +190,8 @@ const executeSearch = async (opts) => {
   if (appliedCategory) {
     conditions.push(`category::text ILIKE $${idx++}`);
     params.push(`%${appliedCategory}%`);
-  } else if (occasionCategories.length > 0) {
-    conditions.push(`category::text = ANY($${idx++})`);
+  } else if (occasionCategories && occasionCategories.length > 0) {
+    conditions.push(`category::text = ANY($${idx++}::text[])`);
     params.push(occasionCategories);
   }
 
@@ -210,20 +210,21 @@ const executeSearch = async (opts) => {
     params.push(`%${appliedBrand}%`);
   }
 
-  const tagIdx = idx++;
-  params.push(semanticTags.length > 0 ? semanticTags : ['__none__']);
-
   let searchCondition = '';
   let ranking = 'popularity';
 
   if (query && query.length > 1) {
+    // Only add semantic tags when there's a query
+    const tagIdx = idx++;
+    params.push(semanticTags && semanticTags.length > 0 ? semanticTags : ['__none__']);
+
     const queryIdx = idx++;
     const patternIdx = idx++;
     params.push(query, `%${query}%`);
 
     searchCondition = `AND (
       search_vector @@ plainto_tsquery('english', $${queryIdx})
-      OR semantic_tags && $${tagIdx}
+      OR semantic_tags && $${tagIdx}::text[]
       OR name ILIKE $${patternIdx}
       OR brand ILIKE $${patternIdx}
       OR category::text ILIKE $${patternIdx}
@@ -232,7 +233,7 @@ const executeSearch = async (opts) => {
 
     ranking = `(
       CASE WHEN search_vector @@ plainto_tsquery('english', $${queryIdx}) THEN 5 ELSE 0 END +
-      CASE WHEN semantic_tags && $${tagIdx} THEN 3 ELSE 0 END +
+      CASE WHEN semantic_tags && $${tagIdx}::text[] THEN 3 ELSE 0 END +
       CASE WHEN name ILIKE $${patternIdx} THEN 4 ELSE 0 END +
       CASE WHEN brand ILIKE $${patternIdx} THEN 2 ELSE 0 END +
       CASE WHEN category::text ILIKE $${patternIdx} THEN 2 ELSE 0 END +
@@ -243,11 +244,11 @@ const executeSearch = async (opts) => {
   const orderBy = sort === 'price_asc' ? 'price ASC'
     : sort === 'price_desc' ? 'price DESC'
       : sort === 'newest' ? 'created_at DESC'
-        : 'score DESC';
+        : query ? 'score DESC' : 'popularity DESC';
 
-  params.push(limit, offset);
   const limitIdx = idx++;
   const offsetIdx = idx++;
+  params.push(limit, offset);
 
   const sqlQuery = `
     SELECT *, ${ranking} AS score, COUNT(*) OVER() as full_count
