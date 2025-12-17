@@ -76,11 +76,16 @@ export const createProduct = async (req, res, next) => {
     if (productData.price) productData.price = parseFloat(productData.price);
     productData.fabric = parseJsonField(productData.fabric);
 
+    let product = await productService.createProduct(productData);
+
+   
     if (req.files?.length) {
-      productData.images = await uploadService.uploadMultipleProductImages(req.files);
+      const imageUrls = await uploadService.uploadMultipleProductImages(req.files, product.id);
+      product = await productService.updateProduct(product.id, {
+        images: imageUrls.map(u => u.medium || u)
+      }, []);
     }
 
-    const product = await productService.createProduct(productData);
     res.status(201).json({ success: true, data: product });
   } catch (error) {
     next(error);

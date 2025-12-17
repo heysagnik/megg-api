@@ -67,12 +67,14 @@ const extractBaseKey = (url) => {
 };
 
 export const uploadProductImage = async (file, productId, index = 0) => {
+  if (!productId) throw new Error('Product ID is required for image upload');
   validateImageFile(file);
   const baseKey = `${productId}/${Date.now()}_${index}`;
   return processAndUploadImage(file.buffer, 'products', baseKey);
 };
 
 export const uploadMultipleProductImages = async (files, productId) => {
+  if (!productId) throw new Error('Product ID is required for image upload');
   if (!files?.length) throw new Error('No files provided');
   if (files.length > 10) throw new Error('Maximum 10 images per upload');
 
