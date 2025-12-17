@@ -360,6 +360,24 @@ export const updateProduct = async (id, updates, newFiles = []) => {
 
   const validUpdates = validation.data;
 
+  if (validUpdates.fabric !== undefined) {
+    if (typeof validUpdates.fabric === 'string') {
+      if (validUpdates.fabric === '') {
+        delete validUpdates.fabric;
+      } else {
+        try {
+          if (validUpdates.fabric.startsWith('[')) {
+            validUpdates.fabric = JSON.parse(validUpdates.fabric);
+          } else {
+            validUpdates.fabric = [validUpdates.fabric]; // Convert single string to array
+          }
+        } catch (e) {
+          validUpdates.fabric = [validUpdates.fabric];
+        }
+      }
+    }
+  }
+
   if (updates.images !== undefined || newFiles.length > 0) {
     const currentImages = existingProduct.images || [];
     let keptImages = updates.images || [];

@@ -134,6 +134,39 @@ export const updateProduct = async (req, res, next) => {
     const updates = { ...req.body };
     const files = req.files || [];
 
+    // Handle fabric - can be empty, plain string, or JSON array
+    if (updates.fabric !== undefined) {
+      if (updates.fabric === '' || updates.fabric === null) {
+        delete updates.fabric; // Don't update if empty
+      } else if (typeof updates.fabric === 'string') {
+        try {
+          if (updates.fabric.trim().startsWith('[')) {
+            updates.fabric = JSON.parse(updates.fabric);
+          }
+          // Otherwise keep as string, service will handle conversion
+        } catch {
+          // Keep original value
+        }
+      }
+    }
+
+    // Handle semantic_tags - ensure it's an array or remove if empty
+    if (updates.semantic_tags !== undefined) {
+      if (updates.semantic_tags === '' || updates.semantic_tags === null) {
+        delete updates.semantic_tags; // Don't update if empty
+      } else if (typeof updates.semantic_tags === 'string') {
+        try {
+          if (updates.semantic_tags.trim().startsWith('[')) {
+            updates.semantic_tags = JSON.parse(updates.semantic_tags);
+          } else if (updates.semantic_tags.trim() === '') {
+            delete updates.semantic_tags;
+          }
+        } catch {
+          delete updates.semantic_tags;
+        }
+      }
+    }
+
     const product = await productService.updateProduct(req.params.id, updates, files);
 
     res.json({
