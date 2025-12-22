@@ -88,6 +88,78 @@ app.get('/api/products', async (c) => {
   }
 });
 
+app.get('/api/products/browse/:category', async (c) => {
+  try {
+    const category = c.req.param('category');
+    const { subcategory, color, sort = 'popularity' } = c.req.query();
+    const { page, limit, offset } = validatePagination(c.req.query('page'), c.req.query('limit'));
+
+    const cacheKey = `browse:${category}:${subcategory || 'all'}:${color || 'all'}:${page}:${sort}`;
+
+    const cached = await c.env.CACHE.get(cacheKey, 'json');
+    if (cached) return c.json(cached);
+
+    const sql = getDB(c.env);
+
+    let products;
+    if (subcategory && color) {
+      products = await sql`
+        SELECT id, name, price, brand, images, category, subcategory, color, affiliate_link, popularity
+        FROM products
+        WHERE is_active = true AND category::text = ${category} AND subcategory::text = ${subcategory} AND color ILIKE ${`%${color}%`}
+        ORDER BY popularity DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `;
+    } else if (subcategory) {
+      products = await sql`
+        SELECT id, name, price, brand, images, category, subcategory, color, affiliate_link, popularity
+        FROM products
+        WHERE is_active = true AND category::text = ${category} AND subcategory::text = ${subcategory}
+        ORDER BY popularity DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `;
+    } else if (color) {
+      products = await sql`
+        SELECT id, name, price, brand, images, category, subcategory, color, affiliate_link, popularity
+        FROM products
+        WHERE is_active = true AND category::text = ${category} AND color ILIKE ${`%${color}%`}
+        ORDER BY popularity DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `;
+    } else {
+      products = await sql`
+        SELECT id, name, price, brand, images, category, subcategory, color, affiliate_link, popularity
+        FROM products
+        WHERE is_active = true AND category::text = ${category}
+        ORDER BY popularity DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `;
+    }
+
+    const banners = await sql`
+      SELECT id, banner_image, link, display_order
+      FROM category_banners
+      WHERE category::text = ${category}
+      ORDER BY display_order ASC
+    `;
+
+    const result = {
+      category,
+      banners: banners || [],
+      products: products || [],
+      page,
+      limit,
+      appliedFilters: { subcategory, color, sort }
+    };
+
+    await c.env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: 900 });
+    return c.json(result);
+  } catch (error) {
+    console.error('Browse fetch error:', error.message);
+    return c.json({ error: 'Failed to browse products' }, 500);
+  }
+});
+
 app.get('/api/products/:id', async (c) => {
   try {
     const id = c.req.param('id');
