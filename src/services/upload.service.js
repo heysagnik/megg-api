@@ -124,15 +124,12 @@ export const uploadReelVideo = async (file, reelId) => {
   const baseKey = `reels/${reelId}/${timestamp}`;
 
   try {
-    // Try to process video (compress + thumbnail)
     const { processVideo } = await import('../utils/videoProcessor.js');
     const { videoBuffer, thumbnailBuffer } = await processVideo(file.buffer);
 
-    // Upload compressed video
     const videoKey = `${baseKey}_video.mp4`;
     const videoUrl = await uploadToR2(videoKey, videoBuffer, 'video/mp4');
 
-    // Upload thumbnail
     const thumbKey = `${baseKey}_thumb.jpg`;
     const thumbnailUrl = await uploadToR2(thumbKey, thumbnailBuffer, 'image/jpeg');
 
@@ -143,8 +140,7 @@ export const uploadReelVideo = async (file, reelId) => {
       compressed: true
     };
   } catch (error) {
-    // Fallback: upload original video without compression
-    console.warn('Video processing failed, uploading original:', error.message);
+    logger.warn('Video processing failed, uploading original:', error.message);
 
     const videoKey = `${baseKey}_video.mp4`;
     const videoUrl = await uploadToR2(videoKey, file.buffer, 'video/mp4');

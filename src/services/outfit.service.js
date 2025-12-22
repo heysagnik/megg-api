@@ -1,5 +1,6 @@
 import { sql } from '../config/neon.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
+import logger from '../utils/logger.js';
 import { outfitSchema } from '../validators/outfit.validators.js';
 
 export const listOutfits = async ({ page = 1, limit = 20 } = {}) => {

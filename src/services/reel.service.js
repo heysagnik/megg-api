@@ -60,7 +60,6 @@ export const createReel = async (reelData) => {
 
   const data = validation.data;
 
-  // Ensure product_ids is properly formatted for PostgreSQL
   if (data.product_ids && Array.isArray(data.product_ids)) {
     data.product_ids = data.product_ids.filter(id => id && typeof id === 'string');
   } else {

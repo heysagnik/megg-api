@@ -1,15 +1,23 @@
 import { sql } from '../config/neon.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
-import { PAGINATION } from '../config/constants.js';
 import logger from '../utils/logger.js';
 import { productDataSchemaRaw, listProductsParamsRaw } from '../validators/product.validators.js';
-import { OCCASION_MAP, FABRIC_PROPERTIES } from '../config/searchMappings.js';
+import { OCCASION_MAP } from '../config/searchMappings.js';
+
+const FABRIC_PROPERTIES = {
+  breathable: ['cotton', 'linen', 'mesh', 'bamboo', 'rayon'],
+  warm: ['wool', 'fleece', 'cashmere', 'thermal', 'velvet'],
+  stretchy: ['spandex', 'elastane', 'lycra', 'stretch'],
+  durable: ['denim', 'canvas', 'leather', 'nylon', 'polyester'],
+  luxurious: ['silk', 'cashmere', 'velvet', 'satin'],
+  waterproof: ['polyester', 'nylon', 'gore-tex'],
+};
+
 
 const generateSemanticTags = (product) => {
   const tags = new Set();
   const { category, subcategory, brand, color, name = '', description = '', price } = product;
 
-  // Category/subcategory tags
   if (category) {
     tags.add(category.toLowerCase().replace(/\s+/g, '-'));
     tags.add(category.toLowerCase());
@@ -21,7 +29,6 @@ const generateSemanticTags = (product) => {
   if (brand) tags.add(brand.toLowerCase());
   if (color) tags.add(color.toLowerCase().trim());
 
-  // Occasion-based tags
   Object.entries(OCCASION_MAP || {}).forEach(([occasion, config]) => {
     if (config.categories?.includes(category)) {
       tags.add(occasion);
@@ -37,7 +44,6 @@ const generateSemanticTags = (product) => {
   if (winterItems.some(w => subLower.includes(w) || catLower.includes(w))) tags.add('winter');
   if (summerItems.some(s => subLower.includes(s) || catLower.includes(s))) tags.add('summer');
 
-  // Fabric tags from name/description
   const text = `${name} ${description}`.toLowerCase();
   Object.entries(FABRIC_PROPERTIES || {}).forEach(([property, fabrics]) => {
     if (fabrics.some(f => text.includes(f))) {
@@ -46,12 +52,10 @@ const generateSemanticTags = (product) => {
     }
   });
 
-  // Color-based tags
   const colorLower = color?.toLowerCase() || '';
   if (['black', 'grey', 'gray', 'white', 'beige', 'brown'].includes(colorLower)) tags.add('neutral');
   if (['black', 'navy', 'charcoal'].includes(colorLower)) tags.add('dark');
 
-  // Price tags
   const priceNum = parseFloat(price) || 0;
   if (priceNum < 500) tags.add('budget-friendly');
   else if (priceNum < 1500) tags.add('mid-range');
@@ -101,7 +105,6 @@ const generateEmbedding = async (product) => {
   }
 };
 
-// Helper to build dynamic queries
 const buildQuery = (baseQuery, conditions, orderBy, limit, offset) => {
   let query = baseQuery;
   const values = [];

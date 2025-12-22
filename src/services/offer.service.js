@@ -69,7 +69,6 @@ export const updateOffer = async (id, updates) => {
   if (!existingOffer) throw new NotFoundError('Offer not found');
 
   if (updates.banner_image && existingOffer.banner_image !== updates.banner_image) {
-    // Delete old banner if image is updated
     await deleteOfferBanner(existingOffer.banner_image).catch(err => logger.error(`Failed to delete old banner: ${err.message}`));
   }
 

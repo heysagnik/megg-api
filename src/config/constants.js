@@ -1,104 +1,101 @@
-// ============================================================================
-// PRODUCT CONSTANTS - Complete Data for Men's Fashion E-commerce
-// ============================================================================
-
 export const PRODUCT_CATEGORIES = [
   'Jacket', 'Hoodies', 'Sweater', 'Sweatshirt', 'Shirt', 'Jeans', 'Trackpants', 'Shoes',
-  'Tshirt', 'Mens Accessories', 'Sports', 'Office wear', 'Innerwear', 'Daily Essentials',
-  'Skin care', 'Traditional', 'Perfume',
+  'Tshirt', 'Mens Accessories', 'Sports', 'Office Wear', 'Innerwear', 'Daily Essentials',
+  'Body Care', 'Traditional', 'Perfume',
 ];
 
 export const PRODUCT_SUBCATEGORIES = {
-  'Jacket': ['Puffer', 'Leather', 'Varsity', 'Bomber', 'Biker', 'Half Jacket', 'Casual Jacket', 'Denim Jacket', 'Wind-cheater'],
-  'Hoodies': ['Zip Hoodie', 'Pullover Hoodie'],
-  'Sweater': ['V Neck Sweater', 'Round Neck Sweater', 'Turtle Neck Sweater', 'Polo Neck Sweater', 'Sweater Vest', 'Cardigan'],
-  'Sweatshirt': ['Oversized Sweatshirt', 'Graphic Sweatshirt', 'Normal Sweatshirt'],
-  'Shirt': ['Check Shirt', 'Striped Shirt', 'Printed Shirt', 'Linen Shirt', 'Textured Shirt', 'Half Shirt', 'Solid Shirt', 'Shacket', 'Formal Shirt', 'Cuban Shirt'],
-  'Jeans': ['Wide Leg Jeans', 'Straight Fit Jeans', 'Cargo Jeans', 'Linen Pants', 'Bootcut Jeans', 'Formal Pants', 'Chinos'],
-  'Trackpants': ['Baggy Trackpants', 'Cargo Trackpants', 'Straight Fit Trackpants'],
-  'Shoes': ['Sneakers', 'Sports Shoes', 'Walking Shoes', 'Clogs', 'Boots', 'Formal Shoes', 'Loafers', 'Canvas Shoes'],
-  'Tshirt': ['Polo Tshirt', 'Oversized Tshirt', 'Full Sleeve Tshirt', 'Gym Tshirt', 'V Neck Tshirt', 'Round Neck Tshirt', 'Printed Tshirt', 'Normal Tshirt'],
-  'Mens Accessories': ['Bags', 'Caps', 'Watches', 'Tie', 'Belt', 'Sunglasses', 'Rings', 'Lockets'],
-  'Sports': ['Sports Shorts', 'Sports Jacket', 'Socks', 'Sports Shoes General', 'Football Shoes', 'Badminton Shoes', 'Gym Tee'],
-  'Office wear': ['Formal Pants Office', 'Formal Shirts Office', 'Suits', 'Tuxedo', 'Formal Shoes Office', 'Loafers Office', 'Blazers', 'Ties & Pocket Squares'],
-  'Innerwear': ['Trunks', 'Boxers', 'Vests', 'Briefs', 'Thermal Top', 'Thermal Bottom', 'Thermal Set'],
+  'Jacket': ['Puffer', 'Leather', 'Varsity', 'Bomber', 'Biker', 'Half', 'Denim', 'Hiking', 'Faux', 'Overcoat', 'Printed', 'Reversible', 'Tailored', 'Cotton'],
+  'Hoodies': ['Zip Hoodie', 'Regular Fit', 'Printed'],
+  'Sweater': ['V-Neck', 'Round Neck', 'Turtle Neck', 'Polo Neck', 'Sweater Vest', 'Cardigan', 'Zipper', 'Printed'],
+  'Sweatshirt': ['Oversized', 'Printed', 'Pullover', 'Zipper'],
+  'Shirt': ['Check', 'Striped', 'Printed', 'Linen', 'Textured', 'Half Sleeve', 'Solid', 'Shacket', 'Formal Shirt'],
+  'Jeans': ['Wide Leg', 'Straight Fit', 'Cargo', 'Linen Pants', 'Bootcut', 'Chinos', 'Korean Pants', 'Formal Pants', 'Corduroy', 'Baggy'],
+  'Trackpants': ['Baggy', 'Cargo'],
+  'Shoes': ['Sneakers', 'Clogs', 'Boots', 'Loafers', 'Canvas', 'Formal Shoes', 'Ethnic Shoes', 'Sports Shoes', 'Football Shoes', 'Badminton Shoes'],
+  'Tshirt': ['Polo', 'Oversized', 'Full Sleeve', 'Regular Fit', 'Gym Tee', 'Football Jersey'],
+  'Mens Accessories': ['Bags', 'Caps', 'Watches', 'Belts', 'Sunglasses', 'Rings', 'Chains'],
+  'Sports': ['Shorts', 'Sports Jacket', 'Socks', 'Sports Shoes', 'Football Shoes', 'Badminton Shoes', 'Gym Tee', 'Football Jersey'],
+  'Office Wear': ['Formal Shirts', 'Formal Pants', 'Formal Shoes', 'Suits', 'Loafers', 'Blazers', 'Ties & Pocket Squares'],
+  'Body Care': ['Face Wash', 'Moisturiser', 'Sunscreen', 'Serum', 'Roll-On', 'Body Wash', 'Hair Oil', 'Shampoo'],
+  'Traditional': ['Kurta', 'Nehru Jacket', 'Pyjama', 'Short Kurta', 'Blazer', 'Indo-Western', 'Ethnic Shoes'],
+  'Perfume': ['Luxurious', 'Under Budget'],
+  'Innerwear': ['Trunks', 'Vests', 'Boxers', 'Thermal Wear'],
   'Daily Essentials': ['Storage & Organizers', 'Travel Essentials', 'Grooming Tools', 'Electronics', 'Cleaning & Care', 'Everyday Carry', 'Home Essentials'],
-  'Skin care': ['Face Wash', 'Moisturiser', 'Cleanser', 'Sunscreen', 'Serum'],
-  'Traditional': ['Kurta', 'Koti', 'Pyjama', 'Short Kurta', 'Blazer Traditional', 'Kurta Set', 'Indo-western'],
-  'Perfume': ['EDT', 'EDC', 'EDP'],
 };
 
 export const ALL_SUBCATEGORIES = Object.values(PRODUCT_SUBCATEGORIES).flat();
 
 export const PRODUCT_COLORS = [
-  // Neutrals / basics
   'Black', 'Jet Black', 'Charcoal', 'Graphite', 'Gunmetal', 'Onyx', 'Ebony',
-  'Gray', 'Light Gray', 'Dark Gray', 'Heather Gray', 'Slate', 'Pewter', 'Steel',
+  'Gray', 'Grey', 'Light Gray', 'Dark Gray', 'Heather Gray', 'Slate', 'Pewter', 'Steel',
   'Silver', 'White', 'Off-White', 'Ivory', 'Cream', 'Alabaster', 'Bone',
   'Beige', 'Sand', 'Tan', 'Camel', 'Khaki', 'Taupe', 'Stone', 'Oatmeal', 'Mushroom',
-
-  // Browns & earth tones
   'Brown', 'Mocha', 'Cocoa', 'Chestnut', 'Walnut', 'Mahogany', 'Chocolate',
   'Saddle', 'Sepia', 'Sienna', 'Terracotta', 'Rust', 'Copper', 'Bronze', 'Brass', 'Umber',
-
-  // Reds & pinks
   'Red', 'Brick Red', 'Burgundy', 'Maroon', 'Wine', 'Oxblood', 'Crimson', 'Scarlet',
   'Cherry', 'Ruby', 'Garnet', 'Berry', 'Raspberry', 'Coral', 'Salmon', 'Peach',
-  'Apricot', 'Blush', 'Rose', 'Dusty Pink', 'Fuchsia', 'Magenta', 'Rosé',
-
-  // Oranges & yellows
+  'Apricot', 'Blush', 'Rose', 'Dusty Pink', 'Fuchsia', 'Magenta', 'Pink',
   'Orange', 'Tangerine', 'Amber', 'Ochre', 'Mustard', 'Saffron', 'Gold', 'Metallic Gold',
   'Yellow', 'Canary', 'Dandelion', 'Lemon', 'Marigold',
-
-  // Greens
   'Green', 'Olive', 'Army Green', 'Khaki Green', 'Moss', 'Fern', 'Pistachio', 'Sage',
   'Mint', 'Seafoam', 'Emerald', 'Jade', 'Kelly Green', 'Hunter Green', 'Forest Green',
-  'Lime', 'Chartreuse', 'Neon Green',
-
-  // Blues
+  'Lime', 'Chartreuse', 'Neon Green', 'Olive Green',
   'Blue', 'Navy', 'Royal Blue', 'Cobalt', 'Indigo', 'Azure', 'Sky Blue', 'Baby Blue',
-  'Cornflower', 'Periwinkle', 'Turquoise', 'Teal', 'Aqua', 'Cyan', 'Sea Blue',
-
-  // Purples & violets
+  'Cornflower', 'Periwinkle', 'Turquoise', 'Teal', 'Aqua', 'Cyan', 'Sea Blue', 'Dark Blue',
   'Purple', 'Violet', 'Plum', 'Eggplant', 'Aubergine', 'Lavender', 'Lilac', 'Mauve',
-
-  // Metallics & specialty
   'Metallic Silver', 'Bronzed', 'Copper Metallic', 'Rose Gold',
-
-  // Pastels & fashion-specific tones
   'Pastel Blue', 'Pastel Pink', 'Pastel Green', 'Pastel Yellow', 'Pastel Purple',
-  'Dusty Blue', 'Dusty Rose', 'Muted Olive', 'Washed Denim', 'Denim Blue', 'Indigo Wash',
-
-  // Accent / neon / statement
+  'Dusty Blue', 'Dusty Rose', 'Muted Olive', 'Washed Denim', 'Denim Blue', 'Indigo Wash', 'Denim',
   'Neon Pink', 'Neon Yellow', 'Neon Orange', 'Neon Blue', 'Highlighter Green',
-
-  // Off shades & descriptive names
   'Off Black', 'Stonewash', 'Vintage Wash', 'Distressed Blue',
-  'Chocolate Brown', 'Cocoa Brown', 'Warm Taupe', 'Cool Gray', 'Blue Gray', 'Steel Blue',
-  'Charcoal Blue', 'Teal Blue', 'Olive Drab', 'Moss Green', 'Sage Green', 'Khaki Beige',
 ];
 
-export const BRAND_CATEGORIES = {
-  'Traditional': ['Vastramay', 'Invictus', 'House of Pataudi', 'Vastrado', 'Kisah', 'DiwaS by Manyavar', 'Tasva', 'Jompers', 'Anouk', 'Fabindia'],
-  'Innerwear': ['Jockey', 'XYXX', 'Damensch', 'US Polo', 'H&M', 'Calvin Klein', 'Van Heusen'],
-  'Perfume': ['Skinn', 'WildStone', 'Ajmal', 'Bella Vita', 'Nautica', 'Jaguar', 'Embark', 'Guess', 'Villain', 'Park Avenue', 'Davidoff', 'Rasasi', 'The Man Company', 'Adilqadri'],
-  'Skin care': ['Minimalist', 'Dot & Key', 'Deconstruct', 'Lakmé', 'The Derma Co', "POND'S", 'Cetaphil', 'Nivea', 'Mamaearth'],
-  'Mens Accessories': ['Nike', 'Adidas', 'Puma', 'Gear', 'Allen Solly', 'Tommy Hilfiger', 'Jack & Jones', 'Skybags', 'Titan', 'Sonata', 'Fastrack', 'Casio', 'Timex', 'Van Heusen', 'Vincent Chase', 'John Jacobs', 'Yellow Chimes', 'StyleCast x Revolte', 'Salty', 'Swashaa', 'H&M', 'Voyage', 'Fashion Frill', 'Roadster', 'Vivity', 'RED TAPE', 'WOODLAND', 'PROVOGUE', 'PETER ENGLAND'],
-  'Shoes': ['Nike', 'Adidas', 'Puma', 'Asics', 'Red Tape', 'Campus', 'Red Chief', 'Thomas Crick', 'Liberty', 'Bata', 'Converse', 'Louis Stitch', 'Woodland', 'US Polo', 'TRENDUTY', 'SPADE CLUB', 'Roadster', 'Hush Puppies'],
-  'Trackpants': ['HRX', 'Maniac', 'NOBERO', 'H&M', 'Bonkers Corner', 'Bene Kleed'],
-  'Jeans': ['Roadster', 'Beyoung', 'The Indian Garage Co.', 'Urbano Fashion', 'Ben Martin', 'Highlander', 'Snitch', 'Peter England', 'Allen Solly', 'Bewakoof', 'Pepe Jeans', 'Glitchez', 'Arrow', 'Bene Kleed', 'Studio Nexx', 'H&M', 'Bershka', 'Thomas Scott', 'Mast & Harbour'],
-  'Sports': ['Nike', 'Adidas', 'Puma', 'Asics', 'HRX', 'Decathlon', 'XYXX', 'Nivia', 'Hundred', 'Jockey', 'US Polo', 'The Indian Garage Co', 'Pepe Jeans', 'Technosport'],
-  'Office wear': ['Arrow', 'Peter England', 'Allen Solly', 'Louis Stitch', 'Tommy Hilfiger', 'Jack & Jones', 'Invictus', 'The Bear House', 'Mr Bowerbird', 'H&M', 'PELUCHE', 'Tasva', 'Blackberrys', 'Park Avenue'],
-  'Tshirt': ['Nike', 'Adidas', 'Puma', 'HRX', 'Roadster', 'The Indian Garage Co.', 'Urbano Fashion', 'Ben Martin', 'Highlander', 'Thomas Scott', 'Snitch', 'Campus Sutra', 'Tommy Hilfiger', 'Jack & Jones', 'Peter England', 'Allen Solly', 'Powerlook', 'Bewakoof', 'US Polo', 'Pepe Jeans', 'Mr Bowerbird', 'Wrogn', 'Dennis Lingo', 'Decathlon', 'H&M'],
-  'Shirt': ['Louis Stitch', 'Rare Rabbit', 'Arrow', 'Maniac', 'The Indian Garage Co.', 'Highlander', 'Snitch', 'Campus Sutra', 'Roadster', 'Bananna Club', 'Tommy Hilfiger', 'Jack & Jones', 'Peter England', 'Allen Solly', 'Invictus', 'Powerlook', 'The Bear House', 'Aeropostale', 'Bershka', 'US Polo', 'Pepe Jeans', 'Mr Bowerbird', 'Wrogn', 'Dennis Lingo', 'H&M', 'ZARA'],
-  'Sweatshirt': ['Nike', 'Adidas', 'Puma', 'HRX', 'Roadster', 'Mr Bowerbird', 'Here & Now', 'Highlander', 'Snitch', 'Campus Sutra', 'Tommy Hilfiger', 'Jack & Jones', 'Bewakoof', 'US Polo', 'Pepe Jeans', 'Wrogn', 'Trendyol', 'H&M', 'ZARA', 'Glitchez'],
-  'Sweater': ['Roadster', 'Arrow', 'Rare Rabbit', 'Tommy Hilfiger', 'Jack & Jones', 'Peter England', 'Allen Solly', 'US Polo', 'Pepe Jeans', 'Wrogn', 'Here & Now', 'Dennis Lingo', 'H&M', 'ZARA', 'Invictus', 'Trendyol', 'Mr Bowerbird', 'Glitchez'],
-  'Hoodies': ['Nike', 'Adidas', 'Puma', 'Campus', 'HRX', 'Roadster', 'Arrow', 'Maniac', 'The Indian Garage Co.', 'Urbano Fashion', 'Highlander', 'Snitch', 'Campus Sutra', 'Tommy Hilfiger', 'Jack & Jones', 'Peter England', 'Allen Solly', 'Bewakoof', 'US Polo', 'Pepe Jeans', 'Wrogn', 'Dennis Lingo', 'Decathlon', 'H&M', 'ZARA'],
-  'Jacket': ['Nike', 'Adidas', 'Puma', 'Red Tape', 'Campus', 'HRX', 'Roadster', 'Louis Stitch', 'Red Chief', 'Rare Rabbit', 'Arrow', 'The Indian Garage Co.', 'Highlander', 'Studio Nexx', 'Snitch', 'Campus Sutra', 'Tommy Hilfiger', 'Jack & Jones', 'Peter England', 'Allen Solly', 'Woodland', 'Bershka', 'Trendyol', 'US Polo', 'Pepe Jeans', 'Wrogn', 'Dennis Lingo', 'Decathlon', 'H&M', 'ZARA'],
-};
+export const PRODUCT_BRANDS = [
+  'Adidas', 'ADILQADRI', 'Aeropostale', 'Ahmed Al Maghribi', 'Ajmal', 'Allen Solly', 'Anouk', 'Arrow',
+  'Armani', 'Armani Beauty', 'Asics', 'Azzaro', 'Bajaj', 'Bata', 'Bewakoof', 'Bene Kleed', 'Bershka',
+  'Beyoung', 'Bella Vita', 'Being Human', 'Blackberrys', 'Campus', 'Campus Sutra', 'Cantabil', 'Casio',
+  'Cetaphil', 'Chemist at Play', 'Columbia', 'Converse', 'Creed', 'Crocs', 'Damensch', 'DaMENSCH',
+  'Davidoff', 'Decathlon', 'Denver', 'Dior', 'Dolce & Gabbana', 'Dot & Key', 'DRIP SPOILER', 'Ducati',
+  'Embark', 'Fastrack', 'Fashion Frill', 'French Connection', 'Fuaark', 'Gap', 'GAP', 'Gear', 'Glitchez',
+  'Goatter', 'Guess', 'H&M', 'Here & Now', 'HERE&NOW', 'Hermès', 'Highlander', 'House of Pataudi',
+  'HRX by Hrithik Roshan', 'HRX', 'Hundred', 'Indulekha', 'Invictus', 'Jack & Jones', 'Jean Paul Gaultier',
+  'Jockey', 'Kalpraag', 'KISAH', 'Lakmé', 'Lattafa', 'Leather Retail', 'Levi\'s', 'Liberty',
+  'Louis Philippe', 'Louis Stitch', 'L\'Oréal', 'Maniac', 'Marks & Spencer', 'Mast & Harbour', 'Minimalist',
+  'Monkstory', 'Monte Carlo', 'Mr Bowerbird', 'Mutaqinoti', 'Navratna', 'Nautica', 'Nike', 'Nivia',
+  'Nobero', 'Paco Rabanne', 'Parachute', 'Park Avenue', 'PELUCHE', 'Peluche', 'Peter England',
+  'Peter England Elite', 'Ponds', 'Pond\'s', 'Powerlook', 'Provogue', 'PUMA', 'Puma', 'PUMA Motorsport',
+  'Rare Rabbit', 'Raymond', 'Red Tape', 'Replica', 'Maison Margiela', 'Roadster', 'Royal Enfield',
+  'Salty', 'Selected', 'See Designs', 'Skinn by Titan', 'Skybags', 'Snitch', 'SNITCH', 'Sonata',
+  'Spade Club', 'StyleCast x Revolte', 'StyleCast', 'Studio Nexx', 'Supersox', 'Swashaa',
+  'The Bear House', 'The Derma Co', 'The Ethnic Co', 'TheEthnic.Co', 'The Indian Garage Co',
+  'The Indian Garage Co.', 'The Man Company', 'The Souled Store', 'Thomas Crick', 'Titan', 'Tommy Hilfiger',
+  'Trendyol', 'Trenduty', 'TBOJ', 'U.S. Polo Assn.', 'US Polo', 'United Colors of Benetton',
+  'Urbano Fashion', 'Ustraa', 'Van Heusen', 'VAN Heusen', 'Vastrado', 'Vastramay', 'Vector X',
+  'Versace', 'Vincent Chase', 'Vivity', 'Voyage', 'Wild Stone', 'Wrogn', 'XYXX', 'Yellow Chimes',
+  'Yoho', 'Yves Saint Laurent', 'MAX', 'Manyavar', 'Diwas by Manyavar', 'Dennison', 'Banana Club',
+  'Tortoise', 'Pierre Carlo', 'Beardo', 'Villain', 'Nivea', 'Dove', 'Lux', 'Pears', 'Timex', 'Woodland',
+  'Pepe Jeans'
+].sort();
 
-// Flatten unique brands
-export const PRODUCT_BRANDS = [...new Set(Object.values(BRAND_CATEGORIES).flat())].sort();
+export const BRAND_CATEGORIES = {
+  'Traditional': ['Vastramay', 'House of Pataudi', 'KISAH', 'Anouk', 'Invictus', 'Arrow', 'Vastrado', 'Kalpraag', 'TheEthnic.Co', 'Blackberrys', 'Peter England Elite', 'Manyavar', 'Louis Stitch', 'Diwas by Manyavar', 'See Designs'],
+  'Innerwear': ['Damensch', 'DaMENSCH', 'XYXX', 'U.S. Polo Assn.', 'Jockey', 'Pepe Jeans'],
+  'Perfume': ['Lattafa', 'Embark', 'Ustraa', 'Tommy Hilfiger', 'Maison Margiela', 'Azzaro', 'Jean Paul Gaultier', 'Creed', 'Armani', 'Versace', 'Yves Saint Laurent', 'Dior', 'Paco Rabanne', 'Hermès', 'Dolce & Gabbana', 'Armani Beauty', 'Guess', 'Davidoff', 'Ahmed Al Maghribi', 'Skinn by Titan', 'Bella Vita', 'Nautica', 'Wild Stone', 'Ajmal', 'Beardo', 'Villain', 'Denver', 'Fastrack', 'Adidas', 'ADILQADRI'],
+  'Body Care': ['Cetaphil', 'Minimalist', 'Pond\'s', 'Dot & Key', 'Deconstruct', 'Lakmé', 'The Derma Co', 'Nivea', 'Chemist at Play', 'The Man Company', 'Indulekha', 'Navratna', 'Parachute', 'Bajaj', 'L\'Oréal', 'Dove', 'Lux', 'Pears'],
+  'Mens Accessories': ['Gear', 'PUMA', 'Skybags', 'Tommy Hilfiger', 'Jack & Jones', 'Nike', 'Adidas', 'Titan', 'Fastrack', 'Peter England', 'Timex', 'Van Heusen', 'Sonata', 'Casio', 'Vincent Chase', 'Voyage', 'Red Tape', 'Provogue', 'Woodland', 'Allen Solly', 'Roadster', 'Yellow Chimes', 'H&M', 'StyleCast x Revolte', 'Salty', 'Swashaa', 'Fashion Frill', 'Vivity'],
+  'Shoes': ['Adidas', 'PUMA', 'Nike', 'Red Tape', 'U.S. Polo Assn.', 'HRX by Hrithik Roshan', 'Campus', 'Roadster', 'Thomas Crick', 'Louis Stitch', 'Louis Philippe', 'Liberty', 'Bata', 'Monkstory', 'House of Pataudi', 'Invictus', 'Cantabil', 'Crocs', 'Yoho', 'Trenduty', 'Spade Club', 'Converse'],
+  'Trackpants': ['Bene Kleed', 'Nobero', 'Maniac', 'H&M', 'HRX'],
+  'Jeans': ['Studio Nexx', 'Roadster', 'Glitchez', 'Bene Kleed', 'The Indian Garage Co.', 'Bershka', 'Urbano Fashion', 'Bewakoof', 'Arrow', 'Beyoung', 'Mr Bowerbird', 'H&M'],
+  'Sports': ['Asics', 'Hundred', 'Nivia', 'HRX', 'Decathlon', 'PUMA', 'Fuaark', 'Adidas', 'Vector X', 'Jockey', 'Supersox', 'Nike'],
+  'Office Wear': ['Beyoung', 'Rare Rabbit', 'Arrow', 'Louis Stitch', 'Liberty', 'Bata', 'Thomas Crick', 'Monkstory', 'Louis Philippe', 'Raymond', 'Blackberrys', 'House of Pataudi', 'Invictus', 'Roadster', 'Cantabil', 'H&M', 'Selected', 'Peluche', 'Mutaqinoti'],
+  'Tshirt': ['Highlander', 'Roadster', 'XYXX', 'Powerlook', 'Campus Sutra', 'Nobero', 'SNITCH', 'PUMA', 'H&M', 'Jack & Jones', 'MAX', 'United Colors of Benetton', 'Levi\'s', 'Bewakoof', 'U.S. Polo Assn.', 'Fuaark', 'Nike', 'Adidas'],
+  'Shirt': ['Vastrado', 'Dennis Lingo', 'Campus Sutra', 'Roadster', 'The Indian Garage Co.', 'Mast & Harbour', 'Highlander', 'HERE&NOW', 'Trendyol', 'Nobero', 'GAP', 'H&M', 'The Souled Store', 'Dennison', 'The Bear House', 'Mr Bowerbird', 'Banana Club'],
+  'Sweatshirt': ['Roadster', 'H&M', 'Highlander', 'Trendyol', 'Campus Sutra', 'Maniac', 'Glitchez', 'United Colors of Benetton', 'Bershka', 'U.S. Polo Assn.', 'Wrogn', 'The Souled Store', 'Park Avenue', 'HRX by Hrithik Roshan'],
+  'Sweater': ['Trendyol', 'H&M', 'Mast & Harbour', 'StyleCast', 'Bershka', 'Highlander', 'Roadster', 'Marks & Spencer', 'XYXX', 'Mr Bowerbird', 'Campus Sutra', 'Wrogn', 'French Connection', 'The Indian Garage Co.', 'Monte Carlo', 'SNITCH', 'Peter England Casuals', 'Rare Rabbit', 'Cantabil', 'Glitchez', 'The Souled Store', 'Bewakoof', 'Jack & Jones'],
+  'Hoodies': ['H&M', 'Trendyol', 'Bershka', 'Glitchez', 'Roadster', 'Highlander', 'PUMA', 'Urbano Fashion'],
+  'Jacket': ['Bershka', 'H&M', 'Highlander', 'Tortoise', 'Roadster', 'TBOJ', 'Goatter', 'HERE&NOW', 'Jack & Jones', 'The Souled Store', 'SNITCH', 'Campus Sutra', 'Wrogn', 'Aeropostale', 'The Bear House', 'XYXX', 'Mast & Harbour', 'DRIP SPOILER', 'StyleCast x Revolte', 'Glitchez', 'Leather Retail', 'Pierre Carlo', 'Royal Enfield', 'PUMA Motorsport', 'Ducati', 'Decathlon', 'Columbia', 'Rare Rabbit', 'Monte Carlo', 'Invictus', 'U.S. Polo Assn.', 'Being Human', 'The Indian Garage Co.', 'HRX by Hrithik Roshan'],
+};
 
 export const VIDEO_CATEGORIES = [
   'Office', 'Date', 'College', 'Party', 'Color-combo', 'Personality development',
@@ -113,6 +110,6 @@ export const PAGINATION = {
 export const CACHE_TTL = {
   COLOR_COMBOS: 3600000,
   CATEGORIES: 3600000,
-  SEARCH: 300000,  // 5 minutes
-  EMBEDDINGS: 86400000,  // 24 hours
+  SEARCH: 300000,
+  EMBEDDINGS: 86400000,
 };

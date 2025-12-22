@@ -97,7 +97,6 @@ export const getRecommendedColorCombos = async (id) => {
   const values = [id];
 
   if (combo.group_type) {
-    // Logic for recommendation by group
     return await sql(query + ' AND group_type = $2 LIMIT 10', [id, combo.group_type]);
   }
   return await sql(query + ' LIMIT 10', values);
