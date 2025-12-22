@@ -15,7 +15,8 @@ export const getWishlist = async (req, res, next) => {
 
 export const addToWishlist = async (req, res, next) => {
   try {
-    const result = await wishlistService.addToWishlist(req.user.id, req.body.product_id);
+    const productId = req.body.productId || req.body.product_id;
+    const result = await wishlistService.addToWishlist(req.user.id, productId);
 
     res.status(201).json({
       success: true,
