@@ -481,8 +481,8 @@ export const getColorVariants = async (id) => {
     AND name ILIKE $2
     AND id != $3
     AND (
-      ($4::text IS NOT NULL AND subcategory = $4) OR
-      ($4::text IS NULL AND category = $5)
+      ($4::text IS NOT NULL AND subcategory::text = $4) OR
+      ($4::text IS NULL AND category::text = $5)
     )
     LIMIT 10`,
     [product.brand, product.name, id, product.subcategory, product.category]
@@ -498,8 +498,8 @@ export const getRecommendedFromSubcategory = async (id) => {
     FROM products
     WHERE id != $1
     AND (
-       ($2::text IS NOT NULL AND subcategory = $2) OR
-       ($2::text IS NULL AND category = $3)
+       ($2::text IS NOT NULL AND subcategory::text = $2) OR
+       ($2::text IS NULL AND category::text = $3)
     )
     ORDER BY popularity DESC
     LIMIT 12`,

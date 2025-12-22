@@ -106,6 +106,46 @@ app.get('/api/products/:id', async (c) => {
   }
 });
 
+app.get('/api/products/:id/recommendations', async (c) => {
+  try {
+    const id = c.req.param('id');
+    if (!UUID_REGEX.test(id)) {
+      return c.json({ error: 'Invalid product ID format' }, 400);
+    }
+
+    const sql = getDB(c.env);
+    const [product] = await sql`SELECT subcategory, category FROM products WHERE id = ${id}`;
+
+    if (!product) return c.json({ error: 'Product not found' }, 404);
+
+    let recommendations;
+    if (product.subcategory) {
+      recommendations = await sql`
+        SELECT id, name, price, brand, images, color, category, subcategory, affiliate_link, popularity
+        FROM products
+        WHERE id != ${id}
+        AND subcategory::text = ${product.subcategory}::text
+        ORDER BY popularity DESC
+        LIMIT 12
+      `;
+    } else {
+      recommendations = await sql`
+        SELECT id, name, price, brand, images, color, category, subcategory, affiliate_link, popularity
+        FROM products
+        WHERE id != ${id}
+        AND category::text = ${product.category}::text
+        ORDER BY popularity DESC
+        LIMIT 12
+      `;
+    }
+
+    return c.json({ products: recommendations });
+  } catch (error) {
+    console.error('Recommendations fetch error:', error.message);
+    return c.json({ error: 'Failed to fetch recommendations' }, 500);
+  }
+});
+
 app.get('/api/categories', async (c) => {
   try {
     const cached = await c.env.CACHE.get('categories:all', 'json');
