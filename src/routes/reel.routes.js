@@ -10,11 +10,13 @@ import {
 } from '../validators/reel.validators.js';
 import { generalLimiter, adminLimiter } from '../middleware/rateLimiter.js';
 
+import { authenticate } from '../middleware/auth.js';
+
 const router = express.Router();
 
 // Public routes
 router.get('/', generalLimiter, reelController.listAllReels);
-router.get('/liked', generalLimiter, reelController.getLikedReels); // Removed auth - will work without login
+router.get('/liked', authenticate, generalLimiter, reelController.getLikedReels);
 router.get('/category/:category', generalLimiter, validate(categorySchema), reelController.listReelsByCategory);
 router.get('/:id/products', generalLimiter, validate(reelIdSchema), reelController.getReelWithProducts);
 router.post('/:id/view', generalLimiter, validate(reelIdSchema), reelController.incrementViews);
