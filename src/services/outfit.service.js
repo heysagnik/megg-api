@@ -67,7 +67,7 @@ export const updateOutfit = async (id, updates) => {
     await deleteProductImage(existingOutfit.banner_image).catch(e => logger.error(`Failed to delete old banner: ${e.message}`));
   }
 
-  const validUpdates = { ...validation.data, updated_at: new Date().toISOString() };
+  const validUpdates = { ...validation.data };
   const keys = Object.keys(validUpdates);
   const setFragments = keys.map((k, i) => `"${k}" = $${i + 2}`);
   const values = [id, ...keys.map(k => validUpdates[k])];
