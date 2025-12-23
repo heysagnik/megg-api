@@ -10,7 +10,7 @@ import {
 } from '../validators/reel.validators.js';
 import { generalLimiter, adminLimiter } from '../middleware/rateLimiter.js';
 
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, optionalAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -19,8 +19,8 @@ router.get('/', generalLimiter, reelController.listAllReels);
 router.get('/liked', authenticate, generalLimiter, reelController.getLikedReels);
 router.get('/category/:category', generalLimiter, validate(categorySchema), reelController.listReelsByCategory);
 router.get('/:id/products', generalLimiter, validate(reelIdSchema), reelController.getReelWithProducts);
-router.post('/:id/view', generalLimiter, validate(reelIdSchema), reelController.incrementViews);
-router.post('/:id/like', generalLimiter, validate(reelIdSchema), reelController.incrementLikes);
+router.post('/:id/view', optionalAuth, generalLimiter, validate(reelIdSchema), reelController.incrementViews);
+router.post('/:id/like', optionalAuth, generalLimiter, validate(reelIdSchema), reelController.incrementLikes);
 
 // Admin routes (API key required)
 router.post('/', apiKeyAuth, adminLimiter, validate(createReelSchema), reelController.createReel);

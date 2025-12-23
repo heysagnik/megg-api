@@ -218,6 +218,48 @@ app.get('/api/products/:id/recommendations', async (c) => {
   }
 });
 
+app.get('/api/products/:id/variants', async (c) => {
+  try {
+    const id = c.req.param('id');
+    if (!UUID_REGEX.test(id)) {
+      return c.json({ error: 'Invalid product ID format' }, 400);
+    }
+
+    const sql = getDB(c.env);
+    const [product] = await sql`SELECT name, brand, subcategory, category FROM products WHERE id = ${id}`;
+
+    if (!product) return c.json({ error: 'Product not found' }, 404);
+
+    let variants;
+    if (product.subcategory) {
+      variants = await sql`
+        SELECT id, name, price, brand, images, color, category, subcategory
+        FROM products
+        WHERE brand = ${product.brand}
+        AND name ILIKE ${product.name}
+        AND id != ${id}
+        AND subcategory::text = ${product.subcategory}::text
+        LIMIT 10
+      `;
+    } else {
+      variants = await sql`
+        SELECT id, name, price, brand, images, color, category, subcategory
+        FROM products
+        WHERE brand = ${product.brand}
+        AND name ILIKE ${product.name}
+        AND id != ${id}
+        AND category::text = ${product.category}::text
+        LIMIT 10
+      `;
+    }
+
+    return c.json({ variants: variants || [] });
+  } catch (error) {
+    console.error('Variants fetch error:', error.message);
+    return c.json({ error: 'Failed to fetch variants' }, 500);
+  }
+});
+
 app.get('/api/categories', async (c) => {
   try {
     const cached = await c.env.CACHE.get('categories:all', 'json');
