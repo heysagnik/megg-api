@@ -1,11 +1,26 @@
 import { z } from 'zod';
 
+// Preprocessor to handle product_ids as either string (JSON) or array
+const parseProductIds = (val) => {
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'string') {
+    if (!val || val.trim() === '' || val === '[]') return [];
+    try {
+      const parsed = JSON.parse(val);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+};
+
 // Raw schema for service-level validation
 export const colorComboDataSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   color_a: z.string().min(1, 'Color A is required'),
   color_b: z.string().min(1, 'Color B is required'),
-  product_ids: z.array(z.string().uuid()).default([]),
+  product_ids: z.preprocess(parseProductIds, z.array(z.string().uuid()).default([])),
   group_type: z.string().optional(),
   model_image: z.string().url().optional()
 });
