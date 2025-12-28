@@ -41,6 +41,7 @@ const productDataSchema = z.object({
   affiliate_link: z.string().url().optional().or(z.literal('')),
   is_active: z.coerce.boolean().default(true),
   semantic_tags: z.array(z.string()).optional().default([]),
+  images: z.array(z.string().url()).optional(),  
 });
 
 export const createProductSchema = z.object({

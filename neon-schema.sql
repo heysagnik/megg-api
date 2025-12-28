@@ -80,7 +80,8 @@ CREATE TYPE video_category AS ENUM (
   'Streetwear',
   'Wedding',
   'Winter',
-  'Layering'
+  'Layering',
+  'Travel'
 );
 
 -- =============================================================================
