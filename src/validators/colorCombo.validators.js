@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
-// Schema to handle product_ids as either string (JSON) or array (already parsed by middleware)
+// Schema to handle product_ids as either array (already parsed by middleware) or string (JSON)
 const productIdsSchema = z.union([
+  z.array(z.string().uuid()),  // Try array first (middleware pre-parses JSON)
   z.string().transform((val) => {
     if (!val || val.trim() === '' || val === '[]') return [];
     try {
@@ -10,8 +11,7 @@ const productIdsSchema = z.union([
     } catch {
       return [];
     }
-  }),
-  z.array(z.string().uuid())
+  })
 ]).optional().default([]);
 
 // Raw schema for service-level validation
