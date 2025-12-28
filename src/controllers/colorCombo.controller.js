@@ -42,7 +42,8 @@ export const createColorCombo = async (req, res, next) => {
       const modelFile = req.files.find(f => f.fieldname === 'model_image');
       if (modelFile) {
         const { uploadColorComboImage } = await import('../services/upload.service.js');
-        modelImageUrl = await uploadColorComboImage(modelFile.buffer, modelFile.originalname, modelFile.mimetype);
+        const tempId = `temp_${Date.now()}`;
+        modelImageUrl = await uploadColorComboImage(modelFile, tempId);
       }
     }
 
@@ -73,7 +74,7 @@ export const updateColorCombo = async (req, res, next) => {
       const modelFile = req.files.find(f => f.fieldname === 'model_image');
       if (modelFile) {
         const { uploadColorComboImage } = await import('../services/upload.service.js');
-        const modelImageUrl = await uploadColorComboImage(modelFile.buffer, modelFile.originalname, modelFile.mimetype);
+        const modelImageUrl = await uploadColorComboImage(modelFile, req.params.id);
         updates.model_image = modelImageUrl;
       }
     }
