@@ -361,7 +361,7 @@ app.get('/api/color-combos', async (c) => {
       `;
     }
 
-    await c.env.CACHE.put(cacheKey, JSON.stringify(combos), { expirationTtl: 3600 });
+    await c.env.CACHE.put(cacheKey, JSON.stringify(combos), { expirationTtl: 2 }); // TODO: Change this to 3600
     return c.json(combos);
   } catch (error) {
     console.error('Color combos fetch error:', error.message);
