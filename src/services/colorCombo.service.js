@@ -9,7 +9,7 @@ export const listColorCombos = async (groupType = null) => {
   const cacheKey = `color_combos:${groupType || 'all'}`;
 
   return getCached(cacheKey, CACHE_TTL.COLOR_COMBOS, async () => {
-    let query = 'SELECT id, name, model_image, product_ids, color_a, color_b, group_type, created_at FROM color_combos';
+    let query = 'SELECT id, name, model_image, product_ids, color_a, color_b, color_c, group_type, created_at FROM color_combos';
     const values = [];
     if (groupType) {
       query += ' WHERE group_type = $1';

@@ -33,7 +33,7 @@ export const getColorComboProducts = async (req, res, next) => {
 
 export const createColorCombo = async (req, res, next) => {
   try {
-    const { name, color_a, color_b, group_type, product_ids } = req.body;
+    const { name, color_a, color_b, color_c, group_type, product_ids } = req.body;
 
     await validate(createColorComboSchema)({ body: req.body }, res, () => { });
 
@@ -51,6 +51,7 @@ export const createColorCombo = async (req, res, next) => {
       name,
       color_a,
       color_b,
+      color_c: color_c || null, // Optional 3rd color
       group_type: group_type || null,
       model_image: modelImageUrl,
       product_ids: product_ids || []

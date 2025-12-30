@@ -350,18 +350,18 @@ app.get('/api/color-combos', async (c) => {
     let combos;
     if (group_type) {
       combos = await sql`
-        SELECT id, name, model_image, product_ids, color_a, color_b, group_type
+        SELECT id, name, model_image, product_ids, color_a, color_b, color_c, group_type
         FROM color_combos WHERE group_type = ${group_type}
         ORDER BY name
       `;
     } else {
       combos = await sql`
-        SELECT id, name, model_image, product_ids, color_a, color_b, group_type
+        SELECT id, name, model_image, product_ids, color_a, color_b, color_c, group_type
         FROM color_combos ORDER BY name
       `;
     }
 
-    await c.env.CACHE.put(cacheKey, JSON.stringify(combos), { expirationTtl: 2 }); // TODO: Change this to 3600
+    await c.env.CACHE.put(cacheKey, JSON.stringify(combos), { expirationTtl: 200 }); // TODO: Change this to 3600
     return c.json(combos);
   } catch (error) {
     console.error('Color combos fetch error:', error.message);

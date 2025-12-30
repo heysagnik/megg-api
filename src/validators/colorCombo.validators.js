@@ -5,6 +5,7 @@ export const colorComboDataSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   color_a: z.string().min(1, 'Color A is required'),
   color_b: z.string().min(1, 'Color B is required'),
+  color_c: z.string().nullable().optional(), // Optional 3rd color
   product_ids: z.preprocess(
     (val) => {
       // Handle null, undefined, empty string
