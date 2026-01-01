@@ -1,5 +1,5 @@
 import { sql } from '../config/neon.js';
-import { expandQuery, OCCASION_MAP, getRelatedColors } from '../config/searchMappings.js';
+import { expandQuery, OCCASION_MAP, getRelatedColors, SUBCATEGORY_ALIASES } from '../config/searchMappings.js';
 import logger from '../utils/logger.js';
 
 const EMBEDDING_DIMENSION = 384;
@@ -13,7 +13,7 @@ function escapeForLike(str) {
 
 const TYPO_CORRECTIONS = {
   // Apparel
-  'tshirt': 't-shirt', 'teeshirt': 't-shirt', 'tee': 't-shirt',
+  'tshirt': 'tshirt', 'teeshirt': 'tshirt', 'tee': 'tshirt', 't-shirt': 'tshirt',
   'hoody': 'hoodie', 'hoddie': 'hoodie', 'hoodi': 'hoodie',
   'jackt': 'jacket', 'jcket': 'jacket',
   'sweter': 'sweater', 'swetar': 'sweater',
@@ -93,6 +93,18 @@ export const unifiedSearch = async (params) => {
 
     if (parsed.confidence >= 2 || filters.category || filters.color || filters.brand) {
       results = await executeStrictSearch({ query, filters, limit, offset, sort, parsed });
+
+      // Fallback: If no results with all filters, try without subcategory
+      if (results.length === 0 && filters.subcategory) {
+        const relaxedFilters = { ...filters, subcategory: null };
+        results = await executeStrictSearch({ query, filters: relaxedFilters, limit, offset, sort, parsed });
+      }
+
+      // Fallback: If still no results, try with just category and brand (drop color)
+      if (results.length === 0 && filters.color && (filters.category || filters.brand)) {
+        const relaxedFilters = { ...filters, subcategory: null, color: null };
+        results = await executeStrictSearch({ query, filters: relaxedFilters, limit, offset, sort, parsed });
+      }
     } else if (query) {
       results = await executeTextSearch({ query, filters, limit, offset, sort });
     } else {
@@ -148,9 +160,18 @@ async function executeStrictSearch({ query, filters, limit, offset, sort, parsed
   }
 
   if (filters.subcategory) {
-    conditions.push(`subcategory::text ILIKE $${idx++}`);
-    params.push(`%${escapeForLike(filters.subcategory)}%`);
-    scoreTerms.push(`CASE WHEN subcategory::text ILIKE $${params.length} THEN 8 ELSE 0 END`);
+    // Get aliases for the subcategory to match database values like 'Half Sleeve' when searching for 'Half'
+    const subcatAliases = SUBCATEGORY_ALIASES[filters.subcategory] || [filters.subcategory.toLowerCase()];
+    const subcatPatterns = [filters.subcategory, ...subcatAliases].slice(0, 3); // Limit to 3 patterns
+
+    const startIdx = idx;
+    const subcatOrConditions = [];
+    for (const pattern of subcatPatterns) {
+      subcatOrConditions.push(`subcategory::text ILIKE $${idx++}`);
+      params.push(`%${escapeForLike(pattern)}%`);
+    }
+    conditions.push(`(${subcatOrConditions.join(' OR ')})`);
+    scoreTerms.push(`CASE WHEN subcategory::text ILIKE $${startIdx} THEN 8 ELSE 0 END`);
   }
 
   if (filters.color) {

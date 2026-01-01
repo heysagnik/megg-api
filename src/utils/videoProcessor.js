@@ -19,7 +19,7 @@ const deleteTempFile = async (filePath) => {
     try {
         await fs.unlink(filePath);
     } catch (e) {
-       
+
     }
 };
 
@@ -28,16 +28,18 @@ export const compressVideo = (inputPath, outputPath) => {
     return new Promise((resolve, reject) => {
         ffmpeg(inputPath)
             .videoCodec('libx264')
-            .size('?x1080') 
-            .videoBitrate('2500k') 
+            .size('?x1080')
+            .videoBitrate('1800k')  // Reduced from 2500k for smaller files
             .audioCodec('aac')
-            .audioBitrate('192k') 
+            .audioBitrate('128k')   // Reduced from 192k, still good quality
             .outputOptions([
-                '-preset medium',
+                '-preset slow',      // Better compression than medium
                 '-movflags +faststart',
-                '-crf 23',
+                '-crf 24',           // Slightly higher = smaller files
                 '-profile:v high',
-                '-level 4.1'
+                '-level 4.1',
+                '-tune film',        // Optimize for film-like content
+                '-pix_fmt yuv420p'   // Maximum compatibility
             ])
             .output(outputPath)
             .on('end', () => resolve(outputPath))

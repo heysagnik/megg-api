@@ -10,11 +10,9 @@ const CATEGORY_ALIASES = {
     'Trackpants': ['trackpants', 'track pants', 'joggers', 'sweatpants', 'lowers'],
     'Shoes': ['shoes', 'shoe', 'footwear', 'sneakers', 'kicks'],
     'Tshirt': ['tshirt', 't-shirt', 't shirt', 'tee', 'tees'],
-    'Mens Accessories': ['accessories', 'accessory', 'watch', 'bag', 'cap', 'belt', 'sunglasses'],
-    'Sports': ['sports', 'sportswear', 'athletic', 'gym', 'workout', 'fitness', 'activewear'],
-    'Office Wear': ['office', 'formal', 'business', 'professional', 'corporate', 'work', 'formals'],
+    'Mens Accessories': ['accessories', 'accessory', 'watch', 'bag', 'cap', 'belt', 'sunglasses', 'ties', 'pocket squares'],
     'Body Care': ['bodycare', 'body care', 'skincare', 'grooming', 'facewash', 'moisturizer'],
-    'Traditional': ['traditional', 'ethnic', 'indian', 'kurta', 'festive'],
+    'Traditional': ['traditional', 'ethnic', 'indian', 'kurta', 'festive', 'wedding', 'formal', 'suits'],
     'Perfume': ['perfume', 'fragrance', 'cologne', 'scent', 'deodorant'],
     'Innerwear': ['innerwear', 'underwear', 'undergarments', 'briefs', 'boxers', 'vests'],
     'Daily Essentials': ['essentials', 'daily essentials', 'everyday'],
@@ -26,15 +24,15 @@ const SUBCATEGORY_ALIASES = {
     'Varsity': ['varsity', 'letterman', 'college jacket'],
     'Bomber': ['bomber', 'bomber jacket', 'flight jacket'],
     'Biker': ['biker', 'motorcycle', 'biker jacket'],
-    'Denim': ['denim jacket', 'jean jacket'],
     'Half': ['half jacket', 'cropped', 'half sleeve jacket'],
-    'Overcoat': ['overcoat', 'trench', 'trench coat', 'long coat'],
+    'Hiking/Trekking': ['hiking', 'trekking', 'hiking jacket', 'trekking jacket', 'outdoor'],
     'Faux': ['faux', 'faux leather'],
+    'Overcoat': ['overcoat', 'trench', 'trench coat', 'long coat'],
     'Printed': ['printed', 'graphic'],
     'Reversible': ['reversible'],
-    'Tailored': ['tailored', 'fitted'],
     'Cotton': ['cotton jacket'],
-    'Hiking': ['hiking', 'trekking'],
+    'Tailored': ['tailored', 'fitted'],
+    'Sports Jacket': ['sports jacket', 'track jacket', 'training jacket', 'athletic jacket'],
     'Zip Hoodie': ['zip hoodie', 'zipper hoodie', 'full zip'],
     'Regular Fit': ['regular fit', 'regular', 'basic'],
     'V-Neck': ['v neck', 'v-neck', 'vneck'],
@@ -50,20 +48,20 @@ const SUBCATEGORY_ALIASES = {
     'Striped': ['striped', 'stripe', 'stripes'],
     'Linen': ['linen'],
     'Textured': ['textured'],
-    'Half Sleeve': ['half sleeve', 'short sleeve'],
+    'Half': ['half sleeve', 'short sleeve', 'half shirt', 'half sleeves', 'half-sleeve'],
     'Solid': ['solid', 'plain'],
     'Shacket': ['shacket', 'shirt jacket'],
     'Formal Shirt': ['formal shirt', 'dress shirt'],
-    'Wide Leg': ['wide leg', 'wide-leg', 'baggy jeans'],
+    'Baggy': ['baggy', 'wide leg', 'wide-leg', 'baggy jeans', 'loose fit', 'relaxed'],
     'Straight Fit': ['straight', 'straight fit', 'regular fit jeans'],
-    'Cargo': ['cargo', 'cargo pants', 'cargo jeans'],
-    'Linen Pants': ['linen pants', 'linen trousers'],
+    'Cargos': ['cargo', 'cargos', 'cargo pants', 'cargo jeans'],
+    'Linen': ['linen', 'linen pants', 'linen trousers'],
     'Bootcut': ['bootcut', 'boot cut'],
     'Chinos': ['chinos', 'chino', 'khaki pants'],
     'Korean Pants': ['korean pants', 'korean style'],
     'Formal Pants': ['formal pants', 'dress pants', 'office pants'],
     'Corduroy': ['corduroy', 'cord'],
-    'Baggy': ['baggy', 'loose fit', 'relaxed'],
+    'Shorts': ['shorts', 'short', 'sports shorts'],
     'Sneakers': ['sneakers', 'sneaker', 'trainers'],
     'Clogs': ['clogs', 'clog'],
     'Boots': ['boots', 'boot', 'ankle boots'],
@@ -76,7 +74,7 @@ const SUBCATEGORY_ALIASES = {
     'Badminton Shoes': ['badminton shoes', 'court shoes'],
     'Polo': ['polo', 'polo shirt', 'polo tshirt'],
     'Full Sleeve': ['full sleeve', 'long sleeve'],
-    'Gym Tee': ['gym tee', 'gym tshirt', 'workout tshirt', 'dri-fit'],
+    'Gym-Tee': ['gym tee', 'gym-tee', 'gym tshirt', 'workout tshirt', 'dri-fit'],
     'Football Jersey': ['football jersey', 'jersey', 'soccer jersey'],
     'Bags': ['bag', 'bags', 'backpack', 'messenger', 'duffel', 'sling'],
     'Caps': ['cap', 'caps', 'hat', 'snapback', 'baseball cap'],
@@ -85,18 +83,16 @@ const SUBCATEGORY_ALIASES = {
     'Sunglasses': ['sunglasses', 'shades', 'aviator', 'wayfarers'],
     'Rings': ['ring', 'rings', 'finger ring'],
     'Chains': ['chain', 'chains', 'necklace', 'pendant'],
-    'Shorts': ['shorts', 'short', 'sports shorts'],
-    'Sports Jacket': ['sports jacket', 'track jacket', 'training jacket'],
-    'Socks': ['socks', 'sock', 'ankle socks'],
-    'Formal Shirts': ['formal shirts', 'office shirt'],
-    'Suits': ['suit', 'suits', 'two piece', 'three piece'],
-    'Blazers': ['blazer', 'blazers', 'sport coat'],
     'Ties & Pocket Squares': ['tie', 'ties', 'pocket square', 'necktie', 'bow tie'],
+    'Socks': ['socks', 'sock', 'ankle socks'],
+    'Suits': ['suit', 'suits', 'two piece', 'three piece'],
+    'Blazer': ['blazer', 'blazers', 'sport coat'],
+    'Ethnic Shoes': ['ethnic shoes', 'mojari', 'jutis', 'kolhapuri'],
     'Face Wash': ['face wash', 'facewash', 'cleanser'],
     'Moisturiser': ['moisturizer', 'moisturiser', 'lotion', 'cream'],
     'Sunscreen': ['sunscreen', 'spf', 'sun protection'],
     'Serum': ['serum', 'face serum'],
-    'Roll-On': ['roll-on', 'deodorant', 'underarm'],
+    'Underarm Roller': ['underarm roller', 'roll-on', 'deodorant', 'underarm'],
     'Body Wash': ['body wash', 'shower gel'],
     'Hair Oil': ['hair oil', 'oil'],
     'Shampoo': ['shampoo', 'hair wash'],
@@ -109,7 +105,7 @@ const SUBCATEGORY_ALIASES = {
     'Luxurious': ['luxurious', 'luxury', 'premium', 'expensive', 'edp', 'eau de parfum'],
     'Under Budget': ['budget', 'affordable', 'cheap', 'edt', 'eau de toilette', 'under budget'],
     'Trunks': ['trunks', 'trunk'],
-    'Vests': ['vest', 'vests', 'sleeveless'],
+    'Innerwear Vest': ['vest', 'vests', 'sleeveless', 'innerwear vest'],
     'Boxers': ['boxer', 'boxers', 'boxer shorts'],
     'Thermal Wear': ['thermal', 'thermals', 'thermal wear', 'winter innerwear'],
 };
@@ -143,6 +139,7 @@ PRODUCT_BRANDS.forEach(brand => {
     if (brand.includes(' ')) BRAND_ALIASES[brand].push(brand.replace(/\s+/g, '').toLowerCase());
 });
 Object.assign(BRAND_ALIASES, {
+    // Common brands with variations
     'Nike': ['nike', 'nke'],
     'Adidas': ['adidas', 'addidas', 'adiddas'],
     'Puma': ['puma'],
@@ -151,15 +148,85 @@ Object.assign(BRAND_ALIASES, {
     'Tommy Hilfiger': ['tommy hilfiger', 'tommy', 'hilfiger'],
     'Calvin Klein': ['calvin klein', 'ck', 'calvin'],
     'U.S. Polo Assn.': ['us polo', 'uspa', 'us polo assn', 'u.s. polo'],
-    'Levi\'s': ['levis', "levi's", 'levi'],
+    "Levi's": ['levis', "levi's", 'levi'],
     'Jack & Jones': ['jack & jones', 'jack and jones', 'j&j', 'jackandjones'],
     'HRX by Hrithik Roshan': ['hrx', 'hrx by hrithik'],
     'HRX': ['hrx'],
+    // Luxury & Premium brands
+    'Hermès': ['hermes', 'hermès'],
+    'Yves Saint Laurent': ['yves saint laurent', 'ysl', 'saint laurent'],
+    'Dior': ['dior', 'christian dior'],
+    'Versace': ['versace'],
+    'Dolce & Gabbana': ['dolce & gabbana', 'dolce and gabbana', 'd&g', 'dg'],
+    'Jean Paul Gaultier': ['jean paul gaultier', 'jpg', 'gaultier'],
+    'Armani': ['armani', 'giorgio armani'],
+    'Paco Rabanne': ['paco rabanne', 'rabanne'],
+    'Creed': ['creed'],
+    // Indian & Traditional brands
+    'House of Pataudi': ['house of pataudi', 'pataudi'],
+    'Manyavar': ['manyavar'],
+    'Diwas by Manyavar': ['diwas', 'diwas by manyavar'],
+    'TheEthnic.Co': ['theethnic.co', 'theethnic', 'the ethnic co'],
+    'KISAH': ['kisah'],
+    'Vastramay': ['vastramay'],
+    'Kalpraag': ['kalpraag'],
+    // Multi-word brands
+    'Allen Solly': ['allen solly'],
+    'Peter England': ['peter england'],
+    'Peter England Elite': ['peter england elite'],
+    'Van Heusen': ['van heusen'],
+    'Louis Philippe': ['louis philippe', 'lp'],
+    'Red Tape': ['red tape', 'redtape'],
+    'United Colors of Benetton': ['united colors of benetton', 'benetton', 'ucb'],
+    'The Indian Garage Co': ['the indian garage co', 'indian garage co', 'tigc'],
+    'The Bear House': ['the bear house', 'bear house'],
+    'The Souled Store': ['the souled store', 'souled store', 'tss'],
+    'The Man Company': ['the man company', 'man company'],
+    'The Derma Co': ['the derma co', 'derma co'],
+    'Mast & Harbour': ['mast & harbour', 'mast and harbour'],
+    'Campus Sutra': ['campus sutra'],
+    'Rare Rabbit': ['rare rabbit'],
+    'Monte Carlo': ['monte carlo'],
+    'Marks & Spencer': ['marks & spencer', 'marks and spencer', 'm&s'],
+    'French Connection': ['french connection', 'fcuk'],
+    'Mr Bowerbird': ['mr bowerbird', 'bowerbird'],
+    'Here & Now': ['here & now', 'here and now', 'here&now'],
+    'Dot & Key': ['dot & key', 'dot and key', 'dot&key'],
+    'Skinn by Titan': ['skinn', 'skinn by titan'],
+    'Wild Stone': ['wild stone', 'wildstone'],
+    'Bella Vita': ['bella vita', 'bellavita'],
+    'Royal Enfield': ['royal enfield'],
+    'TBOJ (The Bar of Jackets)': ['tboj', 'the bar of jackets'],
+    'StyleCast x Revolte': ['stylecast', 'stylecast x revolte', 'revolte'],
+    'PUMA Motorsport': ['puma motorsport'],
+    'Replica (Maison Margiela)': ['replica', 'maison margiela', 'margiela'],
+    'Urbano Fashion': ['urbano fashion', 'urbano'],
+    'Yellow Chimes': ['yellow chimes'],
+    'Chemist at Play': ['chemist at play'],
+    'Ahmed Al Maghribi': ['ahmed al maghribi', 'ahmed maghribi'],
+    'ADILQADRI': ['adilqadri', 'adil qadri'],
+    "L'Oréal": ["l'oreal", 'loreal', "l'oréal"],
+    'Pepe Jeans': ['pepe jeans', 'pepe'],
+    'See Designs': ['see designs'],
+    'Leather Retail': ['leather retail'],
+    'Vector X': ['vector x', 'vectorx'],
+    'DRIP SPOILER': ['drip spoiler'],
+    'Banana Club': ['banana club'],
+    'Pierre Carlo': ['pierre carlo'],
+    'Being Human': ['being human'],
+    'Bene Kleed': ['bene kleed'],
+    'Fashion Frill': ['fashion frill'],
+    'Park Avenue': ['park avenue'],
+    'Vincent Chase': ['vincent chase'],
+    'Thomas Crick': ['thomas crick'],
+    'Louis Stitch': ['louis stitch'],
+    'Spade Club': ['spade club'],
+    'Studio Nexx': ['studio nexx'],
 });
 
 export const OCCASION_MAP = {
     'wedding': {
-        categories: ['Traditional', 'Office Wear', 'Shoes', 'Mens Accessories'],
+        categories: ['Traditional', 'Shirt', 'Shoes', 'Mens Accessories'],
         tags: ['wedding', 'marriage', 'shaadi', 'festive', 'ethnic', 'celebration'],
     },
     'party': {
@@ -167,11 +234,11 @@ export const OCCASION_MAP = {
         tags: ['party', 'club', 'night out', 'celebration', 'event'],
     },
     'gym': {
-        categories: ['Sports', 'Tshirt', 'Trackpants', 'Shoes'],
+        categories: ['Tshirt', 'Trackpants', 'Shoes'],
         tags: ['gym', 'workout', 'fitness', 'training', 'exercise', 'athletic'],
     },
     'office': {
-        categories: ['Office Wear', 'Shirt', 'Shoes', 'Mens Accessories'],
+        categories: ['Traditional', 'Shirt', 'Shoes', 'Mens Accessories'],
         tags: ['office', 'formal', 'professional', 'business', 'work', 'corporate', 'meeting'],
     },
     'casual': {
@@ -195,7 +262,7 @@ export const OCCASION_MAP = {
         tags: ['minimalist', 'minimal', 'simple', 'clean', 'basic', 'plain', 'solid'],
     },
     'luxury': {
-        categories: ['Perfume', 'Mens Accessories', 'Shoes', 'Jacket', 'Office Wear'],
+        categories: ['Perfume', 'Mens Accessories', 'Shoes', 'Jacket', 'Traditional'],
         tags: ['luxury', 'premium', 'expensive', 'designer', 'high-end', 'exclusive'],
     },
     'grooming': {
@@ -203,7 +270,7 @@ export const OCCASION_MAP = {
         tags: ['grooming', 'skincare', 'care', 'hygiene', 'wellness'],
     },
     'running': {
-        categories: ['Sports', 'Shoes', 'Tshirt', 'Trackpants'],
+        categories: ['Tshirt', 'Shoes', 'Trackpants'],
         tags: ['running', 'jogging', 'marathon', 'sprint', 'cardio', 'athletic'],
     },
 };
@@ -219,13 +286,34 @@ function findMatch(query, aliasMap, originalList) {
     const words = q.split(/\s+/);
 
     for (const [key, aliases] of Object.entries(aliasMap)) {
-        for (const alias of aliases) {
-            if (q === alias || q.includes(alias)) {
-                return key;
-            }
+        if (aliases.includes(q)) {
+            return key;
         }
     }
 
+
+    const sortedEntries = Object.entries(aliasMap).map(([key, aliases]) => ({
+        key,
+        aliases: [...aliases].sort((a, b) => b.length - a.length)
+    }));
+
+    // Check longer aliases first across all categories
+    const allAliasesWithKeys = [];
+    for (const { key, aliases } of sortedEntries) {
+        for (const alias of aliases) {
+            allAliasesWithKeys.push({ key, alias });
+        }
+    }
+    // Sort by alias length descending
+    allAliasesWithKeys.sort((a, b) => b.alias.length - a.alias.length);
+
+    for (const { key, alias } of allAliasesWithKeys) {
+        if (q === alias || q.includes(alias)) {
+            return key;
+        }
+    }
+
+    // Third pass: check individual words
     for (const word of words) {
         for (const [key, aliases] of Object.entries(aliasMap)) {
             if (aliases.includes(word)) {
@@ -234,6 +322,7 @@ function findMatch(query, aliasMap, originalList) {
         }
     }
 
+    // Final pass: check original list
     for (const item of originalList) {
         if (q.includes(item.toLowerCase())) {
             return item;
@@ -280,10 +369,27 @@ function findBrand(query) {
     const q = normalizeText(query);
     const words = q.split(/\s+/);
 
-    const multiWordBrands = ['tommy hilfiger', 'calvin klein', 'jack & jones', 'us polo',
-        'jack and jones', 'h&m', 'allen solly', 'peter england', 'van heusen', 'louis philippe',
-        'red tape', 'hrx by hrithik', 'united colors of benetton', 'the indian garage',
-        'the bear house', 'the souled store', 'rare rabbit', 'campus sutra', 'mast & harbour'];
+    const multiWordBrands = [
+        // Common multi-word brands
+        'tommy hilfiger', 'calvin klein', 'jack & jones', 'jack and jones', 'us polo', 'us polo assn',
+        'h&m', 'allen solly', 'peter england', 'peter england elite', 'van heusen', 'louis philippe',
+        'red tape', 'hrx by hrithik', 'united colors of benetton', 'the indian garage co', 'indian garage co',
+        'the bear house', 'bear house', 'the souled store', 'souled store', 'rare rabbit', 'campus sutra',
+        'mast & harbour', 'mast and harbour',
+        // Premium & Luxury
+        'yves saint laurent', 'saint laurent', 'jean paul gaultier', 'dolce & gabbana', 'dolce and gabbana',
+        'paco rabanne', 'giorgio armani', 'armani beauty', 'ahmed al maghribi', 'adil qadri',
+        // Indian & Traditional
+        'house of pataudi', 'diwas by manyavar', 'the ethnic co', 'see designs', 'leather retail',
+        // More multi-word brands
+        'marks & spencer', 'marks and spencer', 'french connection', 'mr bowerbird', 'here & now', 'here and now',
+        'dot & key', 'dot and key', 'skinn by titan', 'wild stone', 'bella vita', 'royal enfield',
+        'the bar of jackets', 'stylecast x revolte', 'puma motorsport', 'maison margiela',
+        'urbano fashion', 'yellow chimes', 'chemist at play', 'the man company', 'the derma co', 'derma co',
+        'monte carlo', 'bene kleed', 'being human', 'banana club', 'pierre carlo', 'fashion frill',
+        'park avenue', 'vincent chase', 'thomas crick', 'louis stitch', 'spade club', 'studio nexx',
+        'vector x', 'drip spoiler', 'pepe jeans'
+    ];
 
     for (const brand of multiWordBrands) {
         if (q.includes(brand)) {
