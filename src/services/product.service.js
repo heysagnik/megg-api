@@ -162,9 +162,9 @@ export const listProducts = async (params) => {
   if (color) conditions.push({ clause: 'color = ?', value: color });
   if (search) conditions.push({ clause: "search_vector @@ plainto_tsquery('english', ?)", value: search });
 
-  // 1. Get Products
+  // 1. Get Products - slim fields for list view
   const listQ = buildQuery(
-    'SELECT id, name, description, price, brand, images, category, subcategory, color, affiliate_link, popularity, clicks, created_at FROM products',
+    'SELECT id, name, price, brand, images, category, subcategory, color, affiliate_link FROM products',
     conditions,
     orderBy,
     limit,
@@ -217,8 +217,9 @@ export const browseByCategory = async (params) => {
   if (subcategory) conditions.push({ clause: 'subcategory = ?', value: subcategory });
   if (color) conditions.push({ clause: 'color = ?', value: color });
 
+  // Slim fields for list view
   const listQ = buildQuery(
-    'SELECT id, name, description, price, brand, images, category, subcategory, color, affiliate_link, popularity, clicks, created_at FROM products',
+    'SELECT id, name, price, brand, images, category, subcategory, color, affiliate_link FROM products',
     conditions,
     orderBy,
     limit,

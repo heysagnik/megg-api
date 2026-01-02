@@ -6,6 +6,8 @@ const EMBEDDING_DIMENSION = 384;
 const MAX_PAGE = 1000;
 const MAX_LIMIT = 100;
 
+const SLIM_FIELDS = 'id, name, price, brand, images, category, subcategory, color, affiliate_link';
+
 function escapeForLike(str) {
   if (!str) return str;
   return str.replace(/[%_]/g, '\\$&');
@@ -214,7 +216,7 @@ async function executeStrictSearch({ query, filters, limit, offset, sort, parsed
         : 'score DESC, popularity DESC';
 
   const sqlQuery = `
-    SELECT *, (${scoreTerms.join(' + ')}) AS score, COUNT(*) OVER() as full_count
+    SELECT ${SLIM_FIELDS}, (${scoreTerms.join(' + ')}) AS score, COUNT(*) OVER() as full_count
     FROM products
     WHERE ${conditions.join(' AND ')}
     ORDER BY ${orderBy}
@@ -249,7 +251,7 @@ async function executeTextSearch({ query, filters, limit, offset, sort }) {
         : 'score DESC';
 
   const sqlQuery = `
-    SELECT *, 
+    SELECT ${SLIM_FIELDS}, 
       (
         CASE WHEN search_vector @@ plainto_tsquery('english', $1) THEN 5 ELSE 0 END +
         CASE WHEN name ILIKE $2 THEN 4 ELSE 0 END +
@@ -307,7 +309,7 @@ async function executeBrowseSearch({ filters, limit, offset, sort }) {
         : 'popularity DESC';
 
   const sqlQuery = `
-    SELECT *, popularity AS score, COUNT(*) OVER() as full_count
+    SELECT ${SLIM_FIELDS}, popularity AS score, COUNT(*) OVER() as full_count
     FROM products
     WHERE ${conditions.join(' AND ')}
     ORDER BY ${orderBy}
@@ -333,7 +335,7 @@ async function executeFallbackSearch({ query, filters, limit, offset, parsed }) 
   }
 
   const sqlQuery = `
-    SELECT *, popularity AS score, COUNT(*) OVER() as full_count
+    SELECT ${SLIM_FIELDS}, popularity AS score, COUNT(*) OVER() as full_count
     FROM products
     WHERE ${conditions}
     ORDER BY popularity DESC
