@@ -13,6 +13,7 @@ import uploadRoutes from './upload.routes.js';
 import bannerRoutes from './banner.routes.js';
 import notificationRoutes from './notification.routes.js';
 import fcmRoutes from './fcm.routes.js';
+import subcategoryRoutes from './subcategory.routes.js';
 
 const router = express.Router();
 
@@ -30,6 +31,7 @@ router.use('/upload', uploadRoutes);
 router.use('/banners', bannerRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/fcm', fcmRoutes);
+router.use('/subcategories', subcategoryRoutes);
 
 router.get('/health', (req, res) => {
   res.json({ success: true, message: 'API is running' });
