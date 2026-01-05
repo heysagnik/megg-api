@@ -4,6 +4,7 @@ import { neon } from '@neondatabase/serverless';
 import { auth } from './routes/auth.js';
 import { wishlist } from './routes/wishlist.js';
 import { search } from './routes/search.js';
+import { handleImageOptimization } from './imageOptimizer.js';
 
 const app = new Hono();
 
@@ -35,6 +36,10 @@ app.route('/api/auth', auth);
 app.route('/api/wishlist', wishlist);
 // Search is proxied to Vercel due to SQL compatibility issues
 // app.route('/api/search', search);
+
+app.get('/api/optimize', async (c) => {
+  return handleImageOptimization(c.req.raw, c.env);
+});
 
 app.get('/api/health', (c) => c.json({ status: 'ok', service: 'workers', timestamp: new Date().toISOString() }));
 

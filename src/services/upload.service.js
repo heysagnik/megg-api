@@ -2,11 +2,7 @@ import sharp from 'sharp';
 import { uploadToR2, deleteFromR2, R2_PUBLIC_URL } from '../config/r2.js';
 import logger from '../utils/logger.js';
 
-const IMAGE_VARIANTS = [
-  { name: 'thumb', width: 100, quality: 70 },
-  { name: 'medium', width: 400, quality: 80 },
-  { name: 'large', width: 800, quality: 85 }
-];
+const CF_WORKER_URL = process.env.CF_WORKER_URL || '';
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
@@ -25,45 +21,42 @@ const validateVideoFile = (file) => {
   if (!ALLOWED_VIDEO_TYPES.includes(file.mimetype)) throw new Error('Invalid video type');
 };
 
+const buildOptimizeUrl = (originalUrl, width, quality) => {
+  if (!CF_WORKER_URL) return originalUrl;
+  return `${CF_WORKER_URL}/api/optimize?url=${encodeURIComponent(originalUrl)}&w=${width}&q=${quality}&f=webp`;
+};
+
 const processAndUploadImage = async (fileBuffer, folder, baseKey) => {
   const metadata = await sharp(fileBuffer).metadata();
   if (metadata.width > 4000 || metadata.height > 4000) {
     throw new Error('Image too large. Maximum 4000x4000 pixels');
   }
 
-  const urls = {};
-  for (const variant of IMAGE_VARIANTS) {
-    const processed = await sharp(fileBuffer)
-      .resize(variant.width, null, { withoutEnlargement: true })
-      .webp({ quality: variant.quality })
-      .toBuffer();
+  const optimized = await sharp(fileBuffer)
+    .resize(2000, null, { withoutEnlargement: true })
+    .webp({ quality: 90 })
+    .toBuffer();
 
-    const key = `${folder}/${baseKey}_${variant.name}.webp`;
-    urls[variant.name] = await uploadToR2(key, processed, 'image/webp');
-  }
+  const key = `${folder}/${baseKey}.webp`;
+  const originalUrl = await uploadToR2(key, optimized, 'image/webp');
 
-  return urls;
+  return {
+    original: originalUrl,
+    thumb: buildOptimizeUrl(originalUrl, 100, 70),
+    medium: buildOptimizeUrl(originalUrl, 400, 80),
+    large: buildOptimizeUrl(originalUrl, 800, 85)
+  };
 };
 
-const extractBaseKey = (url) => {
-  if (!url || typeof url !== 'string') return null;
-
-  const cleanUrl = url.split('?')[0];
-  let key;
-
-  if (R2_PUBLIC_URL && cleanUrl.includes(R2_PUBLIC_URL)) {
-    key = cleanUrl.replace(`${R2_PUBLIC_URL}/`, '');
-  } else if (cleanUrl.startsWith('http')) {
-    try {
-      key = new URL(cleanUrl).pathname.replace(/^\//, '');
-    } catch {
-      return null;
-    }
-  } else {
-    key = cleanUrl;
+const extractOriginalUrl = (imageData) => {
+  if (!imageData) return null;
+  if (typeof imageData === 'object' && imageData.original) return imageData.original;
+  if (typeof imageData === 'string') {
+    const cleanUrl = imageData.split('?')[0];
+    if (cleanUrl.includes(R2_PUBLIC_URL)) return cleanUrl;
+    return cleanUrl.replace(/_(thumb|medium|large)\.webp$/, '.webp');
   }
-
-  return key.replace(/_(thumb|medium|large)\.webp$/, '');
+  return null;
 };
 
 export const uploadProductImage = async (file, productId, index = 0) => {
@@ -85,22 +78,16 @@ export const deleteProductImage = async (imageData) => {
   if (!imageData) return true;
 
   try {
-    if (typeof imageData === 'object' && !Array.isArray(imageData)) {
-      const urls = Object.entries(imageData)
-        .filter(([key, val]) => key !== 'original' && typeof val === 'string')
-        .map(([, url]) => deleteFromR2(url));
-      await Promise.allSettled(urls);
+    if (typeof imageData === 'object' && imageData.original) {
+      await deleteFromR2(imageData.original);
       return true;
     }
 
     if (typeof imageData === 'string') {
-      const baseKey = extractBaseKey(imageData);
-      if (!baseKey) return false;
-
-      const variants = ['thumb', 'medium', 'large'];
-      await Promise.allSettled(
-        variants.map(v => deleteFromR2(`${R2_PUBLIC_URL}/${baseKey}_${v}.webp`))
-      );
+      const originalUrl = extractOriginalUrl(imageData);
+      if (originalUrl) {
+        await deleteFromR2(originalUrl);
+      }
       return true;
     }
 

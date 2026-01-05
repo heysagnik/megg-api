@@ -1,6 +1,7 @@
 import app from './api.js';
 import { handleAutocomplete } from './autocomplete.js';
 import { handleIntentResolution } from './intent.js';
+import { handleImageOptimization } from './imageOptimizer.js';
 
 async function handleCachePurge(request, env) {
     const authHeader = request.headers.get('Authorization');
@@ -58,8 +59,10 @@ export default {
             return handleCachePurge(request, env);
         }
 
-        // Delegate ALL other API requests to the Hono App (api.js)
-        // This handles: /api/products, /api/auth, /api/search (proxy), etc.
+        if (pathname === '/api/optimize') {
+            return handleImageOptimization(request, env);
+        }
+
         return app.fetch(request, env, ctx);
     }
 };
