@@ -6,7 +6,7 @@ const EMBEDDING_DIMENSION = 384;
 const MAX_PAGE = 1000;
 const MAX_LIMIT = 100;
 
-const SLIM_FIELDS = 'id, name, price, brand, images, category, subcategory, color, affiliate_link';
+const SLIM_FIELDS = 'id, name, price, brand, images, category::text as category, subcategory::text as subcategory, color, affiliate_link';
 
 function escapeForLike(str) {
   if (!str) return str;
