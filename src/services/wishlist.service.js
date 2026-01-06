@@ -13,19 +13,23 @@ export const getUserWishlist = async (userId) => {
 };
 
 export const addToWishlist = async (userId, productId) => {
-  const [existing] = await sql('SELECT id FROM wishlist WHERE user_id = $1 AND product_id = $2 LIMIT 1', [userId, productId]);
-
-  if (existing) {
-    return { message: 'Product already in wishlist', id: existing.id };
-  }
-
-  const [connection] = await sql(
-    'INSERT INTO wishlist (user_id, product_id) VALUES ($1, $2) RETURNING *',
+  const result = await sql(
+    `INSERT INTO wishlist (user_id, product_id) 
+     VALUES ($1, $2) 
+     ON CONFLICT (user_id, product_id) DO NOTHING 
+     RETURNING *`,
     [userId, productId]
   );
 
-  if (!connection) throw new Error('Failed to add to wishlist');
-  return connection;
+  if (!result || result.length === 0) {
+    const [existing] = await sql(
+      'SELECT id, added_at FROM wishlist WHERE user_id = $1 AND product_id = $2 LIMIT 1',
+      [userId, productId]
+    );
+    return { message: 'Product already in wishlist', id: existing?.id, added_at: existing?.added_at };
+  }
+
+  return result[0];
 };
 
 export const removeFromWishlist = async (userId, productId) => {
