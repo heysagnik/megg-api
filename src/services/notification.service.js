@@ -2,6 +2,8 @@ import { sql } from '../config/neon.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 import { createNotificationSchema } from '../validators/notification.validators.js';
 
+const MAX_NOTIFICATIONS = 3;
+
 export const createNotification = async (notificationData) => {
   const validation = createNotificationSchema.safeParse(notificationData);
   if (!validation.success) {
@@ -18,28 +20,29 @@ export const createNotification = async (notificationData) => {
   const [notification] = await sql(`INSERT INTO notifications (${cols}) VALUES (${vals}) RETURNING *`, values);
 
   if (!notification) throw new Error('Failed to create notification');
+
+await sql(
+    `DELETE FROM notifications 
+     WHERE id NOT IN (
+       SELECT id FROM notifications 
+       ORDER BY created_at DESC 
+       LIMIT $1
+     )`,
+    [MAX_NOTIFICATIONS]
+  );
+
   return notification;
 };
 
-export const listNotifications = async ({ page = 1, limit = 20 }) => {
-  const p = Number(page) || 1;
-  const l = Number(limit) || 20;
-  const offset = (p - 1) * l;
-
-  const [notifications, countResult] = await Promise.all([
-    sql('SELECT * FROM notifications ORDER BY created_at DESC LIMIT $1 OFFSET $2', [l, offset]),
-    sql('SELECT COUNT(*)::int FROM notifications')
-  ]);
-
-  const count = countResult[0]?.count || 0;
-  if (!notifications) throw new Error('Failed to fetch notifications');
+export const listNotifications = async () => {
+  const notifications = await sql(
+    'SELECT * FROM notifications ORDER BY created_at DESC LIMIT $1',
+    [MAX_NOTIFICATIONS]
+  );
 
   return {
     notifications: notifications || [],
-    total: count,
-    page: p,
-    limit: l,
-    totalPages: Math.ceil(count / l)
+    total: notifications?.length || 0
   };
 };
 
