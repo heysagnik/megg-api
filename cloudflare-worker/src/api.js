@@ -344,8 +344,8 @@ app.get('/api/reels/:id', async (c) => {
 
 app.get('/api/color-combos', async (c) => {
   try {
-    const { group_type } = c.req.query();
-    const cacheKey = `color-combos:${group_type || 'all'}`;
+    const { group_type, color_a, color_b } = c.req.query();
+    const cacheKey = `color-combos:${group_type || 'all'}:${color_a || 'all'}:${color_b || 'all'}`;
 
     const cached = await c.env.CACHE.get(cacheKey, 'json');
     if (cached) return c.json(cached);
@@ -366,8 +366,31 @@ app.get('/api/color-combos', async (c) => {
       `;
     }
 
-    await c.env.CACHE.put(cacheKey, JSON.stringify(combos), { expirationTtl: 200 }); // TODO: Change this to 3600
-    return c.json(combos);
+    // Apply color filters in memory (simpler than dynamic SQL construction with this driver)
+    if (combos) {
+      if (color_a) {
+        combos = combos.filter(c => c.color_a === color_a);
+      }
+      if (color_b) {
+        combos = combos.filter(c => c.color_b === color_b);
+      }
+    }
+
+    const meta = {
+      colors: {
+        a: [...new Set(combos?.map(c => c.color_a).filter(Boolean))].sort(),
+        b: [...new Set(combos?.map(c => c.color_b).filter(Boolean))].sort(),
+        c: [...new Set(combos?.map(c => c.color_c).filter(Boolean))].sort()
+      }
+    };
+
+    const result = {
+      combos: combos || [],
+      meta
+    };
+
+    await c.env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: 3600 });
+    return c.json(result);
   } catch (error) {
     console.error('Color combos fetch error:', error.message);
     return c.json({ error: 'Failed to fetch color combos' }, 500);

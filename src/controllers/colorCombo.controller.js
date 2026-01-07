@@ -4,13 +4,18 @@ import { createColorComboSchema, updateColorComboSchema } from '../validators/co
 
 export const listColorCombos = async (req, res, next) => {
   try {
-    const { group } = req.query;
-    const combos = await colorComboService.listColorCombos(group || null);
+    const { group, color_a, color_b } = req.query;
+    const { combos, meta } = await colorComboService.listColorCombos({
+      groupType: group || null,
+      colorA: color_a || null,
+      colorB: color_b || null
+    });
 
     res.set('Cache-Control', 'public, s-maxage=1800, stale-while-revalidate=3600');
     res.json({
       success: true,
-      data: combos
+      data: combos,
+      meta
     });
   } catch (error) {
     next(error);

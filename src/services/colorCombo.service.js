@@ -5,20 +5,51 @@ import { getCached, invalidateCacheByPrefix, CACHE_TTL } from '../utils/cache.js
 import { deleteProductImage } from './upload.service.js';
 import { colorComboSchema } from '../validators/colorCombo.validators.js';
 
-export const listColorCombos = async (groupType = null) => {
-  const cacheKey = `color_combos:${groupType || 'all'}`;
+export const listColorCombos = async ({ groupType = null, colorA = null, colorB = null } = {}) => {
+  const cacheKey = `color_combos:${groupType || 'all'}:${colorA || 'all'}:${colorB || 'all'}`;
 
   return getCached(cacheKey, CACHE_TTL.COLOR_COMBOS, async () => {
     let query = 'SELECT id, name, model_image, product_ids, color_a, color_b, color_c, group_type, created_at FROM color_combos';
     const values = [];
+    const conditions = [];
+
     if (groupType) {
-      query += ' WHERE group_type = $1';
+      conditions.push(`group_type = $${values.length + 1}`);
       values.push(groupType);
     }
+
+    if (colorA) {
+      conditions.push(`color_a = $${values.length + 1}`);
+      values.push(colorA);
+    }
+
+    if (colorB) {
+      conditions.push(`color_b = $${values.length + 1}`);
+      values.push(colorB);
+    }
+
+    if (conditions.length > 0) {
+      query += ' WHERE ' + conditions.join(' AND ');
+    }
+
     query += ' ORDER BY name ASC';
 
-    const data = await sql(query, values);
-    return data || [];
+    const combos = await sql(query, values);
+
+    // Calculate metadata from the result (or ideally from the whole set, but filters apply)
+    // Actually, metadata usually needs to show options available *within* the current filter context
+    // or global options. The user request says "the colors used in color a, the color used in color b..."
+    // implied from the returned list.
+
+    const meta = {
+      colors: {
+        a: [...new Set(combos.map(c => c.color_a).filter(Boolean))].sort(),
+        b: [...new Set(combos.map(c => c.color_b).filter(Boolean))].sort(),
+        c: [...new Set(combos.map(c => c.color_c).filter(Boolean))].sort()
+      }
+    };
+
+    return { combos: combos || [], meta };
   });
 };
 
