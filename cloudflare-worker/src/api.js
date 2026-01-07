@@ -401,6 +401,34 @@ app.get('/api/color-combos/:id', async (c) => {
   }
 });
 
+app.get('/api/color-combos/:id/recommendations', async (c) => {
+  try {
+    const id = c.req.param('id');
+    if (!UUID_REGEX.test(id)) {
+      return c.json({ error: 'Invalid color combo ID format' }, 400);
+    }
+
+    const sql = getDB(c.env);
+    const [combo] = await sql`SELECT group_type FROM color_combos WHERE id = ${id}`;
+
+    if (!combo) return c.json({ error: 'Color combo not found' }, 404);
+
+    const recommendations = await sql`
+      SELECT id, name, model_image, product_ids, color_a, color_b, color_c, group_type
+      FROM color_combos 
+      WHERE id != ${id} 
+      AND group_type = ${combo.group_type}
+      ORDER BY name
+      LIMIT 10
+    `;
+
+    return c.json({ recommendations: recommendations || [] });
+  } catch (error) {
+    console.error('Color combo recommendations fetch error:', error.message);
+    return c.json({ error: 'Failed to fetch recommendations' }, 500);
+  }
+});
+
 app.get('/api/offers', async (c) => {
   try {
     const cached = await c.env.CACHE.get('offers:all', 'json');

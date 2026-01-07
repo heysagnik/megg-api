@@ -12,12 +12,18 @@ export const r2 = new S3Client({
 export const R2_BUCKET = process.env.R2_BUCKET || 'megg-media';
 export const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL;
 
-export const uploadToR2 = async (key, body, contentType) => {
+export const uploadToR2 = async (key, body, contentType, cacheControl) => {
+    // Default cache: 1 year for images, 7 days for videos
+    const defaultCache = contentType.startsWith('video/')
+        ? 'public, max-age=604800' // 7 days for videos
+        : 'public, max-age=31536000, immutable'; // 1 year for images
+
     await r2.send(new PutObjectCommand({
         Bucket: R2_BUCKET,
         Key: key,
         Body: body,
-        ContentType: contentType
+        ContentType: contentType,
+        CacheControl: cacheControl || defaultCache
     }));
     return `${R2_PUBLIC_URL}/${key}`;
 };

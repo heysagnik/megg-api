@@ -162,7 +162,6 @@ export const listProducts = async (params) => {
   if (color) conditions.push({ clause: 'color = ?', value: color });
   if (search) conditions.push({ clause: "search_vector @@ plainto_tsquery('english', ?)", value: search });
 
-  // 1. Get Products - slim fields for list view
   const listQ = buildQuery(
     'SELECT id, name, price, brand, images, category, subcategory, color, affiliate_link FROM products',
     conditions,
@@ -171,7 +170,6 @@ export const listProducts = async (params) => {
     offset
   );
 
-  // 2. Get Count
   const countQ = buildQuery(
     'SELECT COUNT(*)::int FROM products',
     conditions
