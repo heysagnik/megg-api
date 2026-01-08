@@ -14,3 +14,8 @@ postman_collection.json
 supabase/
 
 */.dev.vars
+
+
+data/
+assets/
+
