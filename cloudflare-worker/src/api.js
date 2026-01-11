@@ -173,7 +173,10 @@ app.get('/api/products/:id', async (c) => {
     }
 
     const sql = getDB(c.env);
-    const [product] = await sql`SELECT * FROM products WHERE id = ${id}`;
+    const [product] = await sql`
+      SELECT id, name, description, price, brand, images, category, subcategory, color, fabric, affiliate_link, is_active, clicks, popularity
+      FROM products WHERE id = ${id}
+    `;
 
     if (!product) return c.json({ error: 'Product not found' }, 404);
 
