@@ -37,11 +37,11 @@ const productDataSchema = z.object({
   category: z.string().min(1, 'Category is required'),
   subcategory: z.string().optional(),
   color: z.string().optional(),
-  fabric: z.string().optional(),
+  fabric: z.union([z.string(), z.array(z.string())]).optional(),
   affiliate_link: z.string().url().optional().or(z.literal('')),
   is_active: z.coerce.boolean().default(true),
   semantic_tags: z.array(z.string()).optional().default([]),
-  images: z.array(z.string().url()).optional(),  
+  images: z.array(z.any()).optional(),
 });
 
 export const createProductSchema = z.object({

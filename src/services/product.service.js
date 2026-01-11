@@ -163,7 +163,7 @@ export const listProducts = async (params) => {
   if (search) conditions.push({ clause: "search_vector @@ plainto_tsquery('english', ?)", value: search });
 
   const listQ = buildQuery(
-    'SELECT id, name, price, brand, images, category, subcategory, color, affiliate_link FROM products',
+    'SELECT id, name, description, price, brand, images, category, subcategory, color, fabric, affiliate_link FROM products',
     conditions,
     orderBy,
     limit,
@@ -215,9 +215,8 @@ export const browseByCategory = async (params) => {
   if (subcategory) conditions.push({ clause: 'subcategory = ?', value: subcategory });
   if (color) conditions.push({ clause: 'color = ?', value: color });
 
-  // Slim fields for list view
   const listQ = buildQuery(
-    'SELECT id, name, price, brand, images, category, subcategory, color, affiliate_link FROM products',
+    'SELECT id, name, description, price, brand, images, category, subcategory, color, fabric, affiliate_link FROM products',
     conditions,
     orderBy,
     limit,
@@ -264,9 +263,34 @@ export const getProductById = async (id) => {
     logger.error(`Failed to update popularity: ${err.message}`)
   );
 
-  const recommended = await getRecommendedProducts(product.fabric, id);
+  // Get color variants (same product, different colors)
+  const variants = await sql(
+    `SELECT id, color, images
+     FROM products
+     WHERE brand = $1
+     AND name ILIKE $2
+     AND id != $3
+     AND is_active = true
+     LIMIT 10`,
+    [product.brand, product.name, id]
+  );
 
-  return { product, recommended };
+  // Get recommended products from same subcategory
+  const recommended = await sql(
+    `SELECT id, name, price, brand, images, color, category, subcategory, affiliate_link
+     FROM products
+     WHERE id != $1
+     AND is_active = true
+     AND (
+       ($2::text IS NOT NULL AND subcategory::text = $2) OR
+       ($2::text IS NULL AND category::text = $3)
+     )
+     ORDER BY popularity DESC
+     LIMIT 8`,
+    [id, product.subcategory, product.category]
+  );
+
+  return { product, variants, recommended };
 };
 
 export const incrementProductClicks = async (id) => {

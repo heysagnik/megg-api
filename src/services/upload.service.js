@@ -25,26 +25,19 @@ const processAndUploadImage = async (fileBuffer, folder, baseKey) => {
     throw new Error('Image too large. Maximum 4000x4000 pixels');
   }
 
-  const variants = [
-    { name: 'original', width: 2000, quality: 95 },
-    { name: 'large', width: 800, quality: 90 },
-    { name: 'medium', width: 400, quality: 85 },
-    { name: 'thumb', width: 100, quality: 80 }
-  ];
 
-  const urls = {};
+  const optimized = await sharp(fileBuffer)
+    .resize(1600, null, { withoutEnlargement: true })
+    .webp({
+      quality: 92,
+      effort: 4
+    })
+    .toBuffer();
 
-  for (const variant of variants) {
-    const optimized = await sharp(fileBuffer)
-      .resize(variant.width, null, { withoutEnlargement: true })
-      .webp({ quality: variant.quality })
-      .toBuffer();
+  const key = `${folder}/${baseKey}.webp`;
+  const url = await uploadToR2(key, optimized, 'image/webp');
 
-    const key = `${folder}/${baseKey}_${variant.name}.webp`;
-    urls[variant.name] = await uploadToR2(key, optimized, 'image/webp');
-  }
-
-  return urls;
+  return url;
 };
 
 

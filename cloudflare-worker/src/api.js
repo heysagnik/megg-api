@@ -59,7 +59,7 @@ app.get('/api/products', async (c) => {
     let products;
     if (category && subcategory) {
       products = await sql`
-        SELECT id, name, price, brand, images, category, subcategory, color, affiliate_link, popularity
+        SELECT id, name, description, price, brand, images, category, subcategory, color, fabric, affiliate_link, popularity
         FROM products 
         WHERE is_active = true AND category = ${category} AND subcategory = ${subcategory}
         ORDER BY popularity DESC
@@ -67,7 +67,7 @@ app.get('/api/products', async (c) => {
       `;
     } else if (category) {
       products = await sql`
-        SELECT id, name, price, brand, images, category, subcategory, color, affiliate_link, popularity
+        SELECT id, name, description, price, brand, images, category, subcategory, color, fabric, affiliate_link, popularity
         FROM products 
         WHERE is_active = true AND category = ${category}
         ORDER BY popularity DESC
@@ -75,7 +75,7 @@ app.get('/api/products', async (c) => {
       `;
     } else {
       products = await sql`
-        SELECT id, name, price, brand, images, category, subcategory, color, affiliate_link, popularity
+        SELECT id, name, description, price, brand, images, category, subcategory, color, fabric, affiliate_link, popularity
         FROM products 
         WHERE is_active = true
         ORDER BY popularity DESC
@@ -176,7 +176,40 @@ app.get('/api/products/:id', async (c) => {
     const [product] = await sql`SELECT * FROM products WHERE id = ${id}`;
 
     if (!product) return c.json({ error: 'Product not found' }, 404);
-    return c.json(product);
+
+    const variants = await sql`
+      SELECT id, color, images
+      FROM products
+      WHERE brand = ${product.brand}
+      AND name ILIKE ${product.name}
+      AND id != ${id}
+      AND is_active = true
+      LIMIT 10
+    `;
+
+    const recommended = product.subcategory
+      ? await sql`
+          SELECT id, name, price, brand, images, color, category, subcategory, affiliate_link
+          FROM products
+          WHERE id != ${id}
+          AND is_active = true
+          AND subcategory::text = ${product.subcategory}
+          ORDER BY popularity DESC
+          LIMIT 8
+        `
+      : await sql`
+          SELECT id, name, price, brand, images, color, category, subcategory, affiliate_link
+          FROM products
+          WHERE id != ${id}
+          AND is_active = true
+          AND category::text = ${product.category}
+          ORDER BY popularity DESC
+          LIMIT 8
+        `;
+
+    sql`UPDATE products SET popularity = popularity + 1 WHERE id = ${id}`.catch(() => { });
+
+    return c.json({ product, variants: variants || [], recommended: recommended || [] });
   } catch (error) {
     console.error('Product fetch error:', error.message);
     return c.json({ error: 'Failed to fetch product' }, 500);
