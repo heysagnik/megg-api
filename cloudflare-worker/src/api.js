@@ -319,6 +319,34 @@ app.get('/api/categories', async (c) => {
   }
 });
 
+app.get('/api/subcategories/:category', async (c) => {
+  try {
+    const category = c.req.param('category');
+    if (!category || category.length > 50) {
+      return c.json({ error: 'Invalid category' }, 400);
+    }
+
+    const cacheKey = `subcategories:${category}`;
+    const cached = await c.env.CACHE.get(cacheKey, 'json');
+    if (cached) return c.json({ success: true, data: cached });
+
+    const sql = getDB(c.env);
+
+    const results = await sql`
+      SELECT id, name, category, display_order, is_active
+      FROM subcategories
+      WHERE category = ${category} AND is_active = true
+      ORDER BY display_order, name
+    `;
+
+    await c.env.CACHE.put(cacheKey, JSON.stringify(results), { expirationTtl: 3600 });
+    return c.json({ success: true, data: results });
+  } catch (error) {
+    console.error('Subcategories fetch error:', error.message);
+    return c.json({ error: 'Failed to fetch subcategories' }, 500);
+  }
+});
+
 app.get('/api/reels', async (c) => {
   try {
     const { category } = c.req.query();
