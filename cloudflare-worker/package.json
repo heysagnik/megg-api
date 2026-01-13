@@ -20,6 +20,6 @@
     "dependencies": {
         "@cf-wasm/photon": "^0.3.4",
         "@neondatabase/serverless": "^1.0.2",
-        "hono": "^4.11.0"
+        "hono": "^4.11.4"
     }
 }
