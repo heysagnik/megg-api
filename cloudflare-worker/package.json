@@ -15,7 +15,7 @@
     ],
     "license": "MIT",
     "devDependencies": {
-        "wrangler": "^4.54.0"
+        "wrangler": "^4.59.1"
     },
     "dependencies": {
         "@cf-wasm/photon": "^0.3.4",
