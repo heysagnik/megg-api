@@ -591,8 +591,8 @@ export const getProductsByBrand = async (params) => {
   const { brand, category, subcategory, color, sort = 'popularity', page = 1, limit = 20 } = params;
   const offset = (page - 1) * limit;
 
-  const colors = color ? color.split(',').map(c => c.trim()).filter(Boolean) : [];
-  const cacheKey = `brand:${brand}:${category || 'all'}:${subcategory || 'all'}:${colors.join(',') || 'all'}:${sort}:${page}:${limit}`;
+  const colorFilters = color ? color.split(',').map(c => c.trim()).filter(Boolean) : [];
+  const cacheKey = `brand:${brand}:${category || 'all'}:${subcategory || 'all'}:${colorFilters.join(',') || 'all'}:${sort}:${page}:${limit}`;
 
   return getCached(cacheKey, CACHE_TTL.PRODUCT_LIST, async () => {
     const conditions = ['is_active = true', 'brand ILIKE $1'];
@@ -607,9 +607,9 @@ export const getProductsByBrand = async (params) => {
       conditions.push(`subcategory::text ILIKE $${paramIdx++}`);
       sqlParams.push(`%${subcategory}%`);
     }
-    if (colors.length > 0) {
-      const colorConditions = colors.map(() => `color ILIKE $${paramIdx++}`);
-      sqlParams.push(...colors.map(c => `%${c}%`));
+    if (colorFilters.length > 0) {
+      const colorConditions = colorFilters.map(() => `color ILIKE $${paramIdx++}`);
+      sqlParams.push(...colorFilters.map(c => `%${c}%`));
       conditions.push(`(${colorConditions.join(' OR ')})`);
     }
 
@@ -680,7 +680,7 @@ export const getProductsByBrand = async (params) => {
       appliedFilters: {
         category: category || null,
         subcategory: subcategory || null,
-        color: color || null,
+        colors: colorFilters,
         sort
       }
     };
