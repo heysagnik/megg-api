@@ -95,69 +95,213 @@ function buildWhereClause(filters, query) {
   return { conditions, params, nextIdx: idx };
 }
 
+function determineFilterVisibility(filters) {
+  const { category, subcategory, color, brand } = filters;
+  const hasCategory = !!category;
+  const hasSubcategory = !!subcategory;
+  const hasColor = !!color;
+  const hasBrand = !!brand;
+
+  if (hasSubcategory && hasColor && hasBrand) {
+    return { showSubcategories: false, showBrands: false, showColors: false, showCategories: false };
+  }
+
+  if (hasCategory && hasColor && hasBrand) {
+    return { showSubcategories: true, showBrands: false, showColors: false, showCategories: false };
+  }
+
+  if (hasSubcategory && hasColor) {
+    return { showSubcategories: false, showBrands: true, showColors: false, showCategories: false };
+  }
+
+  if (hasSubcategory && hasBrand) {
+    return { showSubcategories: false, showBrands: false, showColors: true, showCategories: false };
+  }
+
+  if (hasCategory && hasColor) {
+    return { showSubcategories: true, showBrands: true, showColors: false, showCategories: false };
+  }
+
+  if (hasCategory && hasBrand) {
+    return { showSubcategories: true, showBrands: false, showColors: true, showCategories: false };
+  }
+
+  if (hasSubcategory) {
+    return { showSubcategories: false, showBrands: true, showColors: true, showCategories: false };
+  }
+
+  if (hasCategory) {
+    return { showSubcategories: true, showBrands: true, showColors: true, showCategories: false };
+  }
+
+  return { showSubcategories: true, showBrands: true, showColors: true, showCategories: true };
+}
+
 export const getAvailableFilters = async (params) => {
   const { query: rawQuery, category, subcategory, color, brand } = params;
-  const query = correctTypos(rawQuery);
 
-  const cacheKey = `filters:${query || ''}:${category || ''}:${subcategory || ''}:${color || ''}:${brand || ''}`;
+  const cacheKey = `filters:v4:${rawQuery || ''}:${category || ''}:${subcategory || ''}:${color || ''}:${brand || ''}`;
 
   return getCached(cacheKey, CACHE_TTL.SEARCH_RESULTS, async () => {
     const filters = { category, subcategory, color, brand };
-    const { conditions, params: sqlParams } = buildWhereClause(filters, query);
-    const whereClause = conditions.join(' AND ');
+    const visibility = determineFilterVisibility(filters);
 
-    const [categories, subcategories, colors, brands, priceRange] = await Promise.all([
-      sql(`
-        SELECT category::text as name, COUNT(*)::int as count
-        FROM products
-        WHERE ${whereClause}
-        GROUP BY category
-        ORDER BY count DESC
-      `, sqlParams),
+    const filterParams = [];
+    let filterIdx = 1;
+    const filterConditions = ['is_active = true'];
 
-      sql(`
-        SELECT subcategory::text as name, COUNT(*)::int as count
-        FROM products
-        WHERE ${whereClause}
-        GROUP BY subcategory
-        HAVING subcategory IS NOT NULL AND subcategory::text != ''
-        ORDER BY count DESC
-        LIMIT 30
-      `, sqlParams),
+    if (category) {
+      filterConditions.push(`category::text ILIKE $${filterIdx++}`);
+      filterParams.push(`%${escapeForLike(category)}%`);
+    }
+    if (subcategory) {
+      filterConditions.push(`subcategory::text ILIKE $${filterIdx++}`);
+      filterParams.push(`%${escapeForLike(subcategory)}%`);
+    }
+    if (color) {
+      filterConditions.push(`color ILIKE $${filterIdx++}`);
+      filterParams.push(`%${escapeForLike(color)}%`);
+    }
+    if (brand) {
+      filterConditions.push(`brand ILIKE $${filterIdx++}`);
+      filterParams.push(`%${escapeForLike(brand)}%`);
+    }
 
-      sql(`
-        SELECT TRIM(color) as name, COUNT(*)::int as count
-        FROM products
-        WHERE ${whereClause}
-        GROUP BY TRIM(color)
-        HAVING TRIM(color) IS NOT NULL AND TRIM(color) != ''
-        ORDER BY count DESC
-        LIMIT 30
-      `, sqlParams),
+    const filterWhereClause = filterConditions.join(' AND ');
 
-      sql(`
-        SELECT brand as name, COUNT(*)::int as count
-        FROM products
-        WHERE ${whereClause}
-        GROUP BY brand
-        HAVING brand IS NOT NULL AND brand != ''
-        ORDER BY count DESC
-        LIMIT 50
-      `, sqlParams),
+    const queries = [];
 
+    if (visibility.showCategories) {
+      queries.push(
+        sql(`
+          SELECT category::text as name, COUNT(*)::int as count
+          FROM products
+          WHERE is_active = true
+          GROUP BY category
+          ORDER BY count DESC
+        `, [])
+      );
+    } else {
+      queries.push(Promise.resolve([]));
+    }
+
+    if (visibility.showSubcategories && category) {
+      const subcatParams = [`%${escapeForLike(category)}%`];
+      let subcatCondition = 'is_active = true AND category::text ILIKE $1';
+      if (color) {
+        subcatParams.push(`%${escapeForLike(color)}%`);
+        subcatCondition += ` AND color ILIKE $2`;
+      }
+      if (brand) {
+        subcatParams.push(`%${escapeForLike(brand)}%`);
+        subcatCondition += ` AND brand ILIKE $${subcatParams.length}`;
+      }
+      queries.push(
+        sql(`
+          SELECT subcategory::text as name, COUNT(*)::int as count
+          FROM products
+          WHERE ${subcatCondition}
+          GROUP BY subcategory
+          HAVING subcategory IS NOT NULL AND subcategory::text != ''
+          ORDER BY count DESC
+          LIMIT 30
+        `, subcatParams)
+      );
+    } else if (visibility.showSubcategories) {
+      queries.push(
+        sql(`
+          SELECT subcategory::text as name, COUNT(*)::int as count
+          FROM products
+          WHERE is_active = true
+          GROUP BY subcategory
+          HAVING subcategory IS NOT NULL AND subcategory::text != ''
+          ORDER BY count DESC
+          LIMIT 30
+        `, [])
+      );
+    } else {
+      queries.push(Promise.resolve([]));
+    }
+
+    if (visibility.showColors) {
+      const colorParams = [];
+      const colorConditions = ['is_active = true'];
+      let cidx = 1;
+      if (category) {
+        colorConditions.push(`category::text ILIKE $${cidx++}`);
+        colorParams.push(`%${escapeForLike(category)}%`);
+      }
+      if (subcategory) {
+        colorConditions.push(`subcategory::text ILIKE $${cidx++}`);
+        colorParams.push(`%${escapeForLike(subcategory)}%`);
+      }
+      if (brand) {
+        colorConditions.push(`brand ILIKE $${cidx++}`);
+        colorParams.push(`%${escapeForLike(brand)}%`);
+      }
+      queries.push(
+        sql(`
+          SELECT TRIM(color) as name, COUNT(*)::int as count
+          FROM products
+          WHERE ${colorConditions.join(' AND ')}
+          GROUP BY TRIM(color)
+          HAVING TRIM(color) IS NOT NULL AND TRIM(color) != ''
+          ORDER BY count DESC
+          LIMIT 30
+        `, colorParams)
+      );
+    } else {
+      queries.push(Promise.resolve([]));
+    }
+
+    if (visibility.showBrands) {
+      const brandParams = [];
+      const brandConditions = ['is_active = true'];
+      let bidx = 1;
+      if (category) {
+        brandConditions.push(`category::text ILIKE $${bidx++}`);
+        brandParams.push(`%${escapeForLike(category)}%`);
+      }
+      if (subcategory) {
+        brandConditions.push(`subcategory::text ILIKE $${bidx++}`);
+        brandParams.push(`%${escapeForLike(subcategory)}%`);
+      }
+      if (color) {
+        brandConditions.push(`color ILIKE $${bidx++}`);
+        brandParams.push(`%${escapeForLike(color)}%`);
+      }
+      queries.push(
+        sql(`
+          SELECT brand as name, COUNT(*)::int as count
+          FROM products
+          WHERE ${brandConditions.join(' AND ')}
+          GROUP BY brand
+          HAVING brand IS NOT NULL AND brand != ''
+          ORDER BY count DESC
+          LIMIT 50
+        `, brandParams)
+      );
+    } else {
+      queries.push(Promise.resolve([]));
+    }
+
+    queries.push(
       sql(`
         SELECT MIN(price)::numeric as min, MAX(price)::numeric as max
         FROM products
-        WHERE ${whereClause}
-      `, sqlParams)
-    ]);
+        WHERE ${filterWhereClause}
+      `, filterParams)
+    );
+
+    const [categories, subcategories, colors, brands, priceRange] = await Promise.all(queries);
 
     return {
       categories: categories || [],
       subcategories: subcategories || [],
       colors: colors || [],
       brands: brands || [],
-      priceRange: priceRange[0] || { min: 0, max: 0 }
+      priceRange: priceRange[0] || { min: 0, max: 0 },
+      visibility
     };
   });
 };
