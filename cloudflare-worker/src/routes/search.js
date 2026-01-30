@@ -32,11 +32,11 @@ function escapeForLike(str) {
 }
 
 function determineFilterVisibility(filters) {
-    const { category, subcategory, color, brand } = filters;
+    const { category, subcategory, colors, brands } = filters;
     const hasCategory = !!category;
     const hasSubcategory = !!subcategory;
-    const hasColor = !!color;
-    const hasBrand = !!brand;
+    const hasColor = colors && colors.length > 0;
+    const hasBrand = brands && brands.length > 0;
 
     if (hasSubcategory && hasColor && hasBrand) {
         return { showSubcategories: false, showBrands: false, showColors: false, showCategories: false };
@@ -66,7 +66,7 @@ function determineFilterVisibility(filters) {
 }
 
 async function getAvailableFilters(sql, filters) {
-    const { category, subcategory, color, brand } = filters;
+    const { category, subcategory, colors: filterColors, brands: filterBrands } = filters;
     const visibility = determineFilterVisibility(filters);
 
     const filterParams = [];
@@ -81,13 +81,15 @@ async function getAvailableFilters(sql, filters) {
         filterConditions.push(`subcategory::text ILIKE $${filterIdx++}`);
         filterParams.push(`%${escapeForLike(subcategory)}%`);
     }
-    if (color) {
-        filterConditions.push(`color ILIKE $${filterIdx++}`);
-        filterParams.push(`%${escapeForLike(color)}%`);
+    if (filterColors && filterColors.length > 0) {
+        const colorConds = filterColors.map(() => `color ILIKE $${filterIdx++}`);
+        filterParams.push(...filterColors.map(c => `%${escapeForLike(c)}%`));
+        filterConditions.push(`(${colorConds.join(' OR ')})`);
     }
-    if (brand) {
-        filterConditions.push(`brand ILIKE $${filterIdx++}`);
-        filterParams.push(`%${escapeForLike(brand)}%`);
+    if (filterBrands && filterBrands.length > 0) {
+        const brandConds = filterBrands.map(() => `brand ILIKE $${filterIdx++}`);
+        filterParams.push(...filterBrands.map(b => `%${escapeForLike(b)}%`));
+        filterConditions.push(`(${brandConds.join(' OR ')})`);
     }
 
     const filterWhereClause = filterConditions.join(' AND ');
@@ -102,13 +104,16 @@ async function getAvailableFilters(sql, filters) {
     if (visibility.showSubcategories && category) {
         const subcatParams = [`%${escapeForLike(category)}%`];
         let subcatCondition = 'is_active = true AND category::text ILIKE $1';
-        if (color) {
-            subcatParams.push(`%${escapeForLike(color)}%`);
-            subcatCondition += ` AND color ILIKE $2`;
+        let subcatIdx = 2;
+        if (filterColors && filterColors.length > 0) {
+            const colorConds = filterColors.map(() => `color ILIKE $${subcatIdx++}`);
+            subcatParams.push(...filterColors.map(c => `%${escapeForLike(c)}%`));
+            subcatCondition += ` AND (${colorConds.join(' OR ')})`;
         }
-        if (brand) {
-            subcatParams.push(`%${escapeForLike(brand)}%`);
-            subcatCondition += ` AND brand ILIKE $${subcatParams.length}`;
+        if (filterBrands && filterBrands.length > 0) {
+            const brandConds = filterBrands.map(() => `brand ILIKE $${subcatIdx++}`);
+            subcatParams.push(...filterBrands.map(b => `%${escapeForLike(b)}%`));
+            subcatCondition += ` AND (${brandConds.join(' OR ')})`;
         }
         queries.push(sql(`SELECT subcategory::text as name, COUNT(*)::int as count FROM products WHERE ${subcatCondition} GROUP BY subcategory HAVING subcategory IS NOT NULL AND subcategory::text != '' ORDER BY count DESC LIMIT 30`, subcatParams));
     } else if (visibility.showSubcategories) {
@@ -129,9 +134,10 @@ async function getAvailableFilters(sql, filters) {
             colorConditions.push(`subcategory::text ILIKE $${cidx++}`);
             colorParams.push(`%${escapeForLike(subcategory)}%`);
         }
-        if (brand) {
-            colorConditions.push(`brand ILIKE $${cidx++}`);
-            colorParams.push(`%${escapeForLike(brand)}%`);
+        if (filterBrands && filterBrands.length > 0) {
+            const brandConds = filterBrands.map(() => `brand ILIKE $${cidx++}`);
+            colorParams.push(...filterBrands.map(b => `%${escapeForLike(b)}%`));
+            colorConditions.push(`(${brandConds.join(' OR ')})`);
         }
         queries.push(sql(`SELECT TRIM(color) as name, COUNT(*)::int as count FROM products WHERE ${colorConditions.join(' AND ')} GROUP BY TRIM(color) HAVING TRIM(color) IS NOT NULL AND TRIM(color) != '' ORDER BY count DESC LIMIT 30`, colorParams));
     } else {
@@ -150,9 +156,10 @@ async function getAvailableFilters(sql, filters) {
             brandConditions.push(`subcategory::text ILIKE $${bidx++}`);
             brandParams.push(`%${escapeForLike(subcategory)}%`);
         }
-        if (color) {
-            brandConditions.push(`color ILIKE $${bidx++}`);
-            brandParams.push(`%${escapeForLike(color)}%`);
+        if (filterColors && filterColors.length > 0) {
+            const colorConds = filterColors.map(() => `color ILIKE $${bidx++}`);
+            brandParams.push(...filterColors.map(c => `%${escapeForLike(c)}%`));
+            brandConditions.push(`(${colorConds.join(' OR ')})`);
         }
         queries.push(sql(`SELECT brand as name, COUNT(*)::int as count FROM products WHERE ${brandConditions.join(' AND ')} GROUP BY brand HAVING brand IS NOT NULL AND brand != '' ORDER BY count DESC LIMIT 50`, brandParams));
     } else {
@@ -245,13 +252,13 @@ search.get('/', async (c) => {
         const rawQuery = c.req.query('query') || '';
         const explicitCategory = c.req.query('category');
         const explicitSubcategory = c.req.query('subcategory');
-        const explicitColor = c.req.query('color');
-        const explicitBrand = c.req.query('brand');
+        const explicitColors = c.req.query('color') ? c.req.query('color').split(',').map(c => c.trim()).filter(Boolean) : [];
+        const explicitBrands = c.req.query('brand') ? c.req.query('brand').split(',').map(b => b.trim()).filter(Boolean) : [];
         const sort = c.req.query('sort') || 'relevance';
         const page = Math.max(1, parseInt(c.req.query('page') || '1'));
         const limit = Math.min(100, Math.max(1, parseInt(c.req.query('limit') || '20')));
 
-        if (!rawQuery?.trim() && !explicitCategory && !explicitSubcategory && !explicitColor && !explicitBrand) {
+        if (!rawQuery?.trim() && !explicitCategory && !explicitSubcategory && explicitColors.length === 0 && explicitBrands.length === 0) {
             return c.json({
                 success: true,
                 data: {
@@ -269,7 +276,7 @@ search.get('/', async (c) => {
         }
 
         const query = correctTypos(rawQuery);
-        const cacheKey = `search:v2:${query}:${explicitCategory}:${explicitSubcategory}:${explicitColor}:${explicitBrand}:${sort}:${page}:${limit}`;
+        const cacheKey = `search:v3:${query}:${explicitCategory}:${explicitSubcategory}:${explicitColors.join(',')}:${explicitBrands.join(',')}:${sort}:${page}:${limit}`;
 
         const cached = await c.env.CACHE.get(cacheKey, 'json');
         if (cached) return c.json({ success: true, data: cached });
@@ -280,16 +287,16 @@ search.get('/', async (c) => {
         const filters = {
             category: explicitCategory ?? parsed.category,
             subcategory: explicitSubcategory ?? parsed.subcategory,
-            color: explicitColor ?? parsed.color,
-            brand: explicitBrand ?? parsed.brand,
+            colors: explicitColors.length > 0 ? explicitColors : (parsed.color ? [parsed.color] : []),
+            brands: explicitBrands.length > 0 ? explicitBrands : (parsed.brand ? [parsed.brand] : []),
         };
 
         const appliedFilters = {
             query: rawQuery || null,
             category: filters.category || null,
             subcategory: filters.subcategory || null,
-            color: filters.color || null,
-            brand: filters.brand || null,
+            colors: filters.colors,
+            brands: filters.brands,
             sort
         };
 
@@ -316,8 +323,8 @@ search.get('/', async (c) => {
             suggestedFilters: parsed.confidence >= 1 ? {
                 category: parsed.category,
                 subcategory: parsed.subcategory,
-                color: parsed.color,
-                brand: parsed.brand
+                colors: parsed.color ? [parsed.color] : [],
+                brands: parsed.brand ? [parsed.brand] : []
             } : null
         };
 
@@ -356,20 +363,30 @@ async function executeSearch(sql, { query, filters, limit, offset, sort }) {
         scoreTerms.push(`CASE WHEN subcategory::text ILIKE $${startIdx} THEN 8 ELSE 0 END`);
     }
 
-    if (filters.color) {
-        const colorIdx = idx++;
-        const relatedIdx = idx++;
-        conditions.push(`(color ILIKE $${colorIdx} OR color ILIKE $${relatedIdx})`);
-        params.push(`%${escapeForLike(filters.color)}%`);
-        const relatedColors = getRelatedColors(filters.color);
-        params.push(relatedColors.length > 0 ? `%${escapeForLike(relatedColors[0])}%` : `%${escapeForLike(filters.color)}%`);
-        scoreTerms.push(`CASE WHEN LOWER(color) = LOWER($${colorIdx}) THEN 10 ELSE CASE WHEN color ILIKE $${colorIdx} THEN 5 ELSE 0 END END`);
+    if (filters.colors && filters.colors.length > 0) {
+        const colorConditions = [];
+        const colorScoreConditions = [];
+        for (const color of filters.colors) {
+            const colorIdx = idx++;
+            colorConditions.push(`color ILIKE $${colorIdx}`);
+            params.push(`%${escapeForLike(color)}%`);
+            colorScoreConditions.push(`CASE WHEN LOWER(color) = LOWER($${colorIdx}) THEN 10 ELSE CASE WHEN color ILIKE $${colorIdx} THEN 5 ELSE 0 END END`);
+        }
+        conditions.push(`(${colorConditions.join(' OR ')})`);
+        scoreTerms.push(`GREATEST(${colorScoreConditions.join(', ')})`);
     }
 
-    if (filters.brand) {
-        conditions.push(`brand ILIKE $${idx++}`);
-        params.push(`%${escapeForLike(filters.brand)}%`);
-        scoreTerms.push(`CASE WHEN brand ILIKE $${params.length} THEN 10 ELSE 0 END`);
+    if (filters.brands && filters.brands.length > 0) {
+        const brandConditions = [];
+        const brandScoreConditions = [];
+        for (const brand of filters.brands) {
+            const brandIdx = idx++;
+            brandConditions.push(`brand ILIKE $${brandIdx}`);
+            params.push(`%${escapeForLike(brand)}%`);
+            brandScoreConditions.push(`CASE WHEN brand ILIKE $${brandIdx} THEN 10 ELSE 0 END`);
+        }
+        conditions.push(`(${brandConditions.join(' OR ')})`);
+        scoreTerms.push(`GREATEST(${brandScoreConditions.join(', ')})`);
     }
 
     if (query && query.length >= 2) {
@@ -380,7 +397,7 @@ async function executeSearch(sql, { query, filters, limit, offset, sort }) {
         scoreTerms.push(`CASE WHEN name ILIKE $${patternIdx} THEN 4 ELSE 0 END`);
         scoreTerms.push(`CASE WHEN brand ILIKE $${patternIdx} THEN 3 ELSE 0 END`);
 
-        if (!filters.category && !filters.subcategory && !filters.color && !filters.brand) {
+        if (!filters.category && !filters.subcategory && (!filters.colors || filters.colors.length === 0) && (!filters.brands || filters.brands.length === 0)) {
             conditions.push(`(search_vector @@ plainto_tsquery('english', $${queryIdx}) OR name ILIKE $${patternIdx} OR brand ILIKE $${patternIdx} OR category::text ILIKE $${patternIdx} OR subcategory::text ILIKE $${patternIdx})`);
         }
     }

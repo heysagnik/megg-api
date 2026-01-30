@@ -591,7 +591,8 @@ export const getProductsByBrand = async (params) => {
   const { brand, category, subcategory, color, sort = 'popularity', page = 1, limit = 20 } = params;
   const offset = (page - 1) * limit;
 
-  const cacheKey = `brand:${brand}:${category || 'all'}:${subcategory || 'all'}:${color || 'all'}:${sort}:${page}:${limit}`;
+  const colors = color ? color.split(',').map(c => c.trim()).filter(Boolean) : [];
+  const cacheKey = `brand:${brand}:${category || 'all'}:${subcategory || 'all'}:${colors.join(',') || 'all'}:${sort}:${page}:${limit}`;
 
   return getCached(cacheKey, CACHE_TTL.PRODUCT_LIST, async () => {
     const conditions = ['is_active = true', 'brand ILIKE $1'];
@@ -606,9 +607,10 @@ export const getProductsByBrand = async (params) => {
       conditions.push(`subcategory::text ILIKE $${paramIdx++}`);
       sqlParams.push(`%${subcategory}%`);
     }
-    if (color) {
-      conditions.push(`color ILIKE $${paramIdx++}`);
-      sqlParams.push(`%${color}%`);
+    if (colors.length > 0) {
+      const colorConditions = colors.map(() => `color ILIKE $${paramIdx++}`);
+      sqlParams.push(...colors.map(c => `%${c}%`));
+      conditions.push(`(${colorConditions.join(' OR ')})`);
     }
 
     const limitIdx = paramIdx++;
@@ -655,11 +657,12 @@ export const getProductsByBrand = async (params) => {
         FROM products
         WHERE is_active = true AND brand ILIKE $1
         ${category ? 'AND category::text ILIKE $2' : ''}
+        ${subcategory ? 'AND subcategory::text ILIKE $3' : ''}
         GROUP BY TRIM(color)
         HAVING TRIM(color) IS NOT NULL AND TRIM(color) != ''
         ORDER BY count DESC
         LIMIT 30
-      `, category ? [`%${brand}%`, `%${category}%`] : [`%${brand}%`])
+      `, subcategory && category ? [`%${brand}%`, `%${category}%`, `%${subcategory}%`] : category ? [`%${brand}%`, `%${category}%`] : [`%${brand}%`])
     ]);
 
     return {
