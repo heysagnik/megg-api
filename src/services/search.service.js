@@ -1,5 +1,5 @@
 import { sql } from '../config/neon.js';
-import { expandQuery, OCCASION_MAP, getRelatedColors, SUBCATEGORY_ALIASES } from '../config/searchMappings.js';
+import { expandQuery, getRelatedColors, SUBCATEGORY_ALIASES } from '../config/searchMappings.js';
 import { getCached, CACHE_TTL } from '../utils/cache.js';
 
 const EMBEDDING_DIMENSION = 384;
@@ -51,25 +51,156 @@ export const parseSearchQuery = (query) => {
   return expandQuery(corrected);
 };
 
+function buildWhereClause(filters, query) {
+  const params = [];
+  let idx = 1;
+  const conditions = ['is_active = true'];
+
+  if (filters.category) {
+    conditions.push(`category::text ILIKE $${idx++}`);
+    params.push(`%${escapeForLike(filters.category)}%`);
+  }
+
+  if (filters.subcategory) {
+    const subcatAliases = SUBCATEGORY_ALIASES[filters.subcategory] || [filters.subcategory.toLowerCase()];
+    const subcatPatterns = [filters.subcategory, ...subcatAliases].slice(0, 3);
+    const subcatOrConditions = [];
+    for (const pattern of subcatPatterns) {
+      subcatOrConditions.push(`subcategory::text ILIKE $${idx++}`);
+      params.push(`%${escapeForLike(pattern)}%`);
+    }
+    conditions.push(`(${subcatOrConditions.join(' OR ')})`);
+  }
+
+  if (filters.color) {
+    const colorIdx = idx++;
+    const relatedIdx = idx++;
+    conditions.push(`(color ILIKE $${colorIdx} OR color ILIKE $${relatedIdx})`);
+    params.push(`%${escapeForLike(filters.color)}%`);
+    const relatedColors = getRelatedColors(filters.color);
+    params.push(relatedColors.length > 0 ? `%${escapeForLike(relatedColors[0])}%` : `%${escapeForLike(filters.color)}%`);
+  }
+
+  if (filters.brand) {
+    conditions.push(`brand ILIKE $${idx++}`);
+    params.push(`%${escapeForLike(filters.brand)}%`);
+  }
+
+  if (query && query.length >= 2) {
+    conditions.push(`(search_vector @@ plainto_tsquery('english', $${idx}) OR name ILIKE $${idx + 1} OR brand ILIKE $${idx + 1})`);
+    params.push(query, `%${escapeForLike(query)}%`);
+    idx += 2;
+  }
+
+  return { conditions, params, nextIdx: idx };
+}
+
+export const getAvailableFilters = async (params) => {
+  const { query: rawQuery, category, subcategory, color, brand } = params;
+  const query = correctTypos(rawQuery);
+
+  const cacheKey = `filters:${query || ''}:${category || ''}:${subcategory || ''}:${color || ''}:${brand || ''}`;
+
+  return getCached(cacheKey, CACHE_TTL.SEARCH_RESULTS, async () => {
+    const filters = { category, subcategory, color, brand };
+    const { conditions, params: sqlParams } = buildWhereClause(filters, query);
+    const whereClause = conditions.join(' AND ');
+
+    const [categories, subcategories, colors, brands, priceRange] = await Promise.all([
+      sql(`
+        SELECT category::text as name, COUNT(*)::int as count
+        FROM products
+        WHERE ${whereClause}
+        GROUP BY category
+        ORDER BY count DESC
+      `, sqlParams),
+
+      sql(`
+        SELECT subcategory::text as name, COUNT(*)::int as count
+        FROM products
+        WHERE ${whereClause}
+        GROUP BY subcategory
+        HAVING subcategory IS NOT NULL AND subcategory::text != ''
+        ORDER BY count DESC
+        LIMIT 30
+      `, sqlParams),
+
+      sql(`
+        SELECT TRIM(color) as name, COUNT(*)::int as count
+        FROM products
+        WHERE ${whereClause}
+        GROUP BY TRIM(color)
+        HAVING TRIM(color) IS NOT NULL AND TRIM(color) != ''
+        ORDER BY count DESC
+        LIMIT 30
+      `, sqlParams),
+
+      sql(`
+        SELECT brand as name, COUNT(*)::int as count
+        FROM products
+        WHERE ${whereClause}
+        GROUP BY brand
+        HAVING brand IS NOT NULL AND brand != ''
+        ORDER BY count DESC
+        LIMIT 50
+      `, sqlParams),
+
+      sql(`
+        SELECT MIN(price)::numeric as min, MAX(price)::numeric as max
+        FROM products
+        WHERE ${whereClause}
+      `, sqlParams)
+    ]);
+
+    return {
+      categories: categories || [],
+      subcategories: subcategories || [],
+      colors: colors || [],
+      brands: brands || [],
+      priceRange: priceRange[0] || { min: 0, max: 0 }
+    };
+  });
+};
+
 export const unifiedSearch = async (params) => {
   const rawQuery = params.query;
-  const category = params.category;
-  const subcategory = params.subcategory;
-  const color = params.color;
-  const brand = params.brand;
+  const explicitCategory = params.category;
+  const explicitSubcategory = params.subcategory;
+  const explicitColor = params.color;
+  const explicitBrand = params.brand;
   const sort = params.sort;
   const page = Math.max(1, Math.min(MAX_PAGE, parseInt(params.page) || 1));
   const limit = Math.max(1, Math.min(MAX_LIMIT, parseInt(params.limit) || 20));
 
-  if (!rawQuery?.trim() && !category && !subcategory && !color && !brand) {
-    return { products: [], banners: [], total: 0, page, limit, totalPages: 0, searchMode: 'empty', filters: {}, metadata: {} };
+  if (!rawQuery?.trim() && !explicitCategory && !explicitSubcategory && !explicitColor && !explicitBrand) {
+    return {
+      products: [],
+      banners: [],
+      total: 0,
+      page,
+      limit,
+      totalPages: 0,
+      searchMode: 'empty',
+      appliedFilters: {},
+      availableFilters: { categories: [], subcategories: [], colors: [], brands: [], priceRange: { min: 0, max: 0 } }
+    };
   }
 
   if (rawQuery && rawQuery.length === 1) {
-    return { products: [], banners: [], total: 0, page, limit, totalPages: 0, searchMode: 'empty', filters: {}, metadata: {} };
+    return {
+      products: [],
+      banners: [],
+      total: 0,
+      page,
+      limit,
+      totalPages: 0,
+      searchMode: 'empty',
+      appliedFilters: {},
+      availableFilters: { categories: [], subcategories: [], colors: [], brands: [], priceRange: { min: 0, max: 0 } }
+    };
   }
 
-  const cacheKey = `search:${rawQuery || ''}:${category || ''}:${subcategory || ''}:${color || ''}:${brand || ''}:${sort || ''}:${page}:${limit}`;
+  const cacheKey = `search:v2:${rawQuery || ''}:${explicitCategory || ''}:${explicitSubcategory || ''}:${explicitColor || ''}:${explicitBrand || ''}:${sort || ''}:${page}:${limit}`;
 
   return getCached(cacheKey, CACHE_TTL.SEARCH_RESULTS, async () => {
     const offset = (page - 1) * limit;
@@ -77,40 +208,28 @@ export const unifiedSearch = async (params) => {
     const parsed = query ? expandQuery(query) : {};
 
     const filters = {
-      category: category || parsed.category,
-      subcategory: subcategory || parsed.subcategory,
-      color: color || parsed.color,
-      brand: brand || parsed.brand,
-      occasion: parsed.occasion,
+      category: explicitCategory ?? parsed.category,
+      subcategory: explicitSubcategory ?? parsed.subcategory,
+      color: explicitColor ?? parsed.color,
+      brand: explicitBrand ?? parsed.brand,
     };
 
-    let results;
+    const appliedFilters = {
+      query: rawQuery || null,
+      category: filters.category || null,
+      subcategory: filters.subcategory || null,
+      color: filters.color || null,
+      brand: filters.brand || null,
+      sort: sort || 'relevance'
+    };
 
-    if (parsed.confidence >= 2 || filters.category || filters.color || filters.brand) {
-      results = await executeStrictSearch({ query, filters, limit, offset, sort, parsed });
-
-      if (results.length === 0 && filters.subcategory) {
-        const relaxedFilters = { ...filters, subcategory: null };
-        results = await executeStrictSearch({ query, filters: relaxedFilters, limit, offset, sort, parsed });
-      }
-
-      if (results.length === 0 && filters.color && (filters.category || filters.brand)) {
-        const relaxedFilters = { ...filters, subcategory: null, color: null };
-        results = await executeStrictSearch({ query, filters: relaxedFilters, limit, offset, sort, parsed });
-      }
-    } else if (query) {
-      results = await executeTextSearch({ query, filters, limit, offset, sort });
-    } else {
-      results = await executeBrowseSearch({ filters, limit, offset, sort });
-    }
-
-    if (results.length === 0 && parsed.confidence >= 1) {
-      results = await executeFallbackSearch({ query, filters, limit, offset, parsed });
-    }
-
-    const banners = filters.category
-      ? await sql('SELECT id, banner_image, link, display_order FROM category_banners WHERE category = $1 ORDER BY display_order ASC', [filters.category])
-      : [];
+    const [results, availableFilters, banners] = await Promise.all([
+      executeSearch({ query, filters, limit, offset, sort }),
+      getAvailableFilters({ query: rawQuery, ...filters }),
+      filters.category
+        ? sql('SELECT id, banner_image, link, display_order FROM category_banners WHERE category = $1 ORDER BY display_order ASC', [filters.category])
+        : Promise.resolve([])
+    ]);
 
     const total = results.length > 0 ? parseInt(results[0].full_count || results.length) : 0;
 
@@ -121,23 +240,20 @@ export const unifiedSearch = async (params) => {
       page,
       limit,
       totalPages: Math.ceil(total / limit),
-      searchMode: results.length > 0 ? (parsed.confidence >= 2 ? 'strict' : 'smart') : 'empty',
-      filters: {
-        appliedCategory: filters.category,
-        appliedSubcategory: filters.subcategory,
-        appliedColor: filters.color,
-        appliedBrand: filters.brand,
-        appliedSort: sort || 'relevance',
-      },
-      metadata: {
-        query,
-        parsed: { confidence: parsed.confidence, isCompound: parsed.isCompound },
-      },
+      searchMode: query ? 'search' : 'browse',
+      appliedFilters,
+      availableFilters,
+      suggestedFilters: parsed.confidence >= 1 ? {
+        category: parsed.category,
+        subcategory: parsed.subcategory,
+        color: parsed.color,
+        brand: parsed.brand
+      } : null
     };
   });
 };
 
-async function executeStrictSearch({ query, filters, limit, offset, sort, parsed }) {
+async function executeSearch({ query, filters, limit, offset, sort }) {
   const params = [];
   let idx = 1;
   const conditions = ['is_active = true'];
@@ -152,7 +268,6 @@ async function executeStrictSearch({ query, filters, limit, offset, sort, parsed
   if (filters.subcategory) {
     const subcatAliases = SUBCATEGORY_ALIASES[filters.subcategory] || [filters.subcategory.toLowerCase()];
     const subcatPatterns = [filters.subcategory, ...subcatAliases].slice(0, 3);
-
     const startIdx = idx;
     const subcatOrConditions = [];
     for (const pattern of subcatPatterns) {
@@ -165,7 +280,8 @@ async function executeStrictSearch({ query, filters, limit, offset, sort, parsed
 
   if (filters.color) {
     const colorIdx = idx++;
-    conditions.push(`(color ILIKE $${colorIdx} OR color ILIKE $${idx++})`);
+    const relatedIdx = idx++;
+    conditions.push(`(color ILIKE $${colorIdx} OR color ILIKE $${relatedIdx})`);
     params.push(`%${escapeForLike(filters.color)}%`);
     const relatedColors = getRelatedColors(filters.color);
     params.push(relatedColors.length > 0 ? `%${escapeForLike(relatedColors[0])}%` : `%${escapeForLike(filters.color)}%`);
@@ -178,19 +294,17 @@ async function executeStrictSearch({ query, filters, limit, offset, sort, parsed
     scoreTerms.push(`CASE WHEN brand ILIKE $${params.length} THEN 10 ELSE 0 END`);
   }
 
-  if (parsed.occasion && OCCASION_MAP[parsed.occasion] && !filters.category) {
-    const occasionCategories = OCCASION_MAP[parsed.occasion].categories;
-    conditions.push(`category::text = ANY($${idx++}::text[])`);
-    params.push(occasionCategories);
-  }
-
-  if (query && query.length > 2) {
+  if (query && query.length >= 2) {
     const queryIdx = idx++;
     const patternIdx = idx++;
-    params.push(query, `%${query}%`);
+    params.push(query, `%${escapeForLike(query)}%`);
+    scoreTerms.push(`CASE WHEN search_vector @@ plainto_tsquery('english', $${queryIdx}) THEN 5 ELSE 0 END`);
+    scoreTerms.push(`CASE WHEN name ILIKE $${patternIdx} THEN 4 ELSE 0 END`);
+    scoreTerms.push(`CASE WHEN brand ILIKE $${patternIdx} THEN 3 ELSE 0 END`);
 
-    scoreTerms.push(`CASE WHEN search_vector @@ plainto_tsquery('english', $${queryIdx}) THEN 4 ELSE 0 END`);
-    scoreTerms.push(`CASE WHEN name ILIKE $${patternIdx} THEN 5 ELSE 0 END`);
+    if (!filters.category && !filters.subcategory && !filters.color && !filters.brand) {
+      conditions.push(`(search_vector @@ plainto_tsquery('english', $${queryIdx}) OR name ILIKE $${patternIdx} OR brand ILIKE $${patternIdx} OR category::text ILIKE $${patternIdx} OR subcategory::text ILIKE $${patternIdx})`);
+    }
   }
 
   const limitIdx = idx++;
@@ -213,130 +327,11 @@ async function executeStrictSearch({ query, filters, limit, offset, sort, parsed
   return await sql(sqlQuery, params);
 }
 
-async function executeTextSearch({ query, filters, limit, offset, sort }) {
-  const params = [query, `%${query}%`, limit, offset];
-
-  let filterConditions = '';
-  let paramIdx = 5;
-
-  if (filters.category) {
-    filterConditions += ` AND category::text ILIKE $${paramIdx++}`;
-    params.push(`%${filters.category}%`);
-  }
-  if (filters.color) {
-    filterConditions += ` AND color ILIKE $${paramIdx++}`;
-    params.push(`%${filters.color}%`);
-  }
-  if (filters.brand) {
-    filterConditions += ` AND brand ILIKE $${paramIdx++}`;
-    params.push(`%${filters.brand}%`);
-  }
-
-  const orderBy = sort === 'price_asc' ? 'price ASC'
-    : sort === 'price_desc' ? 'price DESC'
-      : sort === 'newest' ? 'created_at DESC'
-        : 'score DESC';
-
-  const sqlQuery = `
-    SELECT ${SLIM_FIELDS}, 
-      (
-        CASE WHEN search_vector @@ plainto_tsquery('english', $1) THEN 5 ELSE 0 END +
-        CASE WHEN name ILIKE $2 THEN 4 ELSE 0 END +
-        CASE WHEN brand ILIKE $2 THEN 3 ELSE 0 END +
-        CASE WHEN category::text ILIKE $2 THEN 2 ELSE 0 END +
-        popularity * 0.01
-      ) AS score,
-      COUNT(*) OVER() as full_count
-    FROM products
-    WHERE is_active = true
-      AND (
-        search_vector @@ plainto_tsquery('english', $1)
-        OR name ILIKE $2
-        OR brand ILIKE $2
-        OR category::text ILIKE $2
-        OR subcategory::text ILIKE $2
-      )
-      ${filterConditions}
-    ORDER BY ${orderBy}
-    LIMIT $3 OFFSET $4
-  `;
-
-  return await sql(sqlQuery, params);
-}
-
-async function executeBrowseSearch({ filters, limit, offset, sort }) {
-  const params = [];
-  let idx = 1;
-  const conditions = ['is_active = true'];
-
-  if (filters.category) {
-    conditions.push(`category::text ILIKE $${idx++}`);
-    params.push(`%${filters.category}%`);
-  }
-  if (filters.subcategory) {
-    conditions.push(`subcategory::text ILIKE $${idx++}`);
-    params.push(`%${filters.subcategory}%`);
-  }
-  if (filters.color) {
-    conditions.push(`color ILIKE $${idx++}`);
-    params.push(`%${filters.color}%`);
-  }
-  if (filters.brand) {
-    conditions.push(`brand ILIKE $${idx++}`);
-    params.push(`%${filters.brand}%`);
-  }
-
-  params.push(limit, offset);
-  const limitIdx = idx++;
-  const offsetIdx = idx++;
-
-  const orderBy = sort === 'price_asc' ? 'price ASC'
-    : sort === 'price_desc' ? 'price DESC'
-      : sort === 'newest' ? 'created_at DESC'
-        : 'popularity DESC';
-
-  const sqlQuery = `
-    SELECT ${SLIM_FIELDS}, popularity AS score, COUNT(*) OVER() as full_count
-    FROM products
-    WHERE ${conditions.join(' AND ')}
-    ORDER BY ${orderBy}
-    LIMIT $${limitIdx} OFFSET $${offsetIdx}
-  `;
-
-  return await sql(sqlQuery, params);
-}
-
-async function executeFallbackSearch({ query, filters, limit, offset }) {
-  const params = [`%${query}%`, limit, offset];
-
-  let conditions = 'is_active = true AND (name ILIKE $1 OR brand ILIKE $1 OR description ILIKE $1)';
-  let paramIdx = 4;
-
-  if (filters.category) {
-    conditions += ` AND category::text ILIKE $${paramIdx++}`;
-    params.push(`%${filters.category}%`);
-  }
-  if (filters.color) {
-    conditions += ` AND color ILIKE $${paramIdx++}`;
-    params.push(`%${filters.color}%`);
-  }
-
-  const sqlQuery = `
-    SELECT ${SLIM_FIELDS}, popularity AS score, COUNT(*) OVER() as full_count
-    FROM products
-    WHERE ${conditions}
-    ORDER BY popularity DESC
-    LIMIT $2 OFFSET $3
-  `;
-
-  return await sql(sqlQuery, params);
-}
-
 export const hybridSearch = async (params) => {
   const { query, embedding, category, subcategory, color, brand, sort, page = 1, limit = 20 } = params;
 
   if (!query || query.length < 2) {
-    return { products: [], total: 0, page, limit, totalPages: 0, searchMode: 'empty' };
+    return { products: [], total: 0, page, limit, totalPages: 0, searchMode: 'empty', availableFilters: {} };
   }
 
   const hasEmbedding = embedding && Array.isArray(embedding) && embedding.length === EMBEDDING_DIMENSION;
@@ -345,7 +340,7 @@ export const hybridSearch = async (params) => {
     return unifiedSearch(params);
   }
 
-  const cacheKey = `hybrid:${query}:${category || ''}:${color || ''}:${brand || ''}:${sort || ''}:${page}:${limit}`;
+  const cacheKey = `hybrid:v2:${query}:${category || ''}:${color || ''}:${brand || ''}:${sort || ''}:${page}:${limit}`;
 
   return getCached(cacheKey, CACHE_TTL.SEARCH_RESULTS, async () => {
     const offset = (page - 1) * limit;
@@ -354,9 +349,10 @@ export const hybridSearch = async (params) => {
     const parsed = expandQuery(correctedQuery);
 
     const filters = {
-      category: category || parsed.category,
-      color: color || parsed.color,
-      brand: brand || parsed.brand,
+      category: category ?? parsed.category,
+      subcategory: subcategory ?? parsed.subcategory,
+      color: color ?? parsed.color,
+      brand: brand ?? parsed.brand,
     };
 
     const sqlParams = [vectorStr, correctedQuery];
@@ -421,7 +417,11 @@ export const hybridSearch = async (params) => {
       LIMIT $${limitIdx} OFFSET $${offsetIdx}
     `;
 
-    const results = await sql(sqlQuery, sqlParams);
+    const [results, availableFilters] = await Promise.all([
+      sql(sqlQuery, sqlParams),
+      getAvailableFilters({ query, ...filters })
+    ]);
+
     const total = results.length > 0 ? parseInt(results[0].full_count || 0) : 0;
 
     return {
@@ -431,8 +431,13 @@ export const hybridSearch = async (params) => {
       limit,
       totalPages: Math.ceil(total / limit),
       searchMode: 'hybrid',
-      filters: { appliedCategory: filters.category, appliedColor: filters.color, appliedBrand: filters.brand },
-      metadata: { query: correctedQuery, hasVectorSearch: true },
+      appliedFilters: {
+        query,
+        category: filters.category,
+        color: filters.color,
+        brand: filters.brand
+      },
+      availableFilters
     };
   });
 };
@@ -441,5 +446,49 @@ export const smartSearch = unifiedSearch;
 export const advancedSearch = unifiedSearch;
 
 export const getSearchSuggestions = async (partialQuery) => {
-  return { products: [], categories: [], colors: [], styles: [] };
+  if (!partialQuery || partialQuery.length < 2) {
+    return { suggestions: [] };
+  }
+
+  const cacheKey = `suggestions:${partialQuery}`;
+
+  return getCached(cacheKey, CACHE_TTL.SEARCH_RESULTS, async () => {
+    const pattern = `%${escapeForLike(partialQuery)}%`;
+
+    const [products, brands, categories] = await Promise.all([
+      sql(`
+        SELECT DISTINCT name
+        FROM products
+        WHERE is_active = true AND name ILIKE $1
+        ORDER BY popularity DESC
+        LIMIT 5
+      `, [pattern]),
+
+      sql(`
+        SELECT DISTINCT brand as name, COUNT(*)::int as count
+        FROM products
+        WHERE is_active = true AND brand ILIKE $1
+        GROUP BY brand
+        ORDER BY count DESC
+        LIMIT 5
+      `, [pattern]),
+
+      sql(`
+        SELECT DISTINCT category::text as name, COUNT(*)::int as count
+        FROM products
+        WHERE is_active = true AND category::text ILIKE $1
+        GROUP BY category
+        ORDER BY count DESC
+        LIMIT 5
+      `, [pattern])
+    ]);
+
+    return {
+      suggestions: [
+        ...products.map(p => ({ type: 'product', value: p.name })),
+        ...brands.map(b => ({ type: 'brand', value: b.name, count: b.count })),
+        ...categories.map(c => ({ type: 'category', value: c.name, count: c.count }))
+      ].slice(0, 10)
+    };
+  });
 };

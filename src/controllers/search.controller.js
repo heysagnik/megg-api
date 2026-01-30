@@ -2,10 +2,7 @@ import * as searchService from '../services/search.service.js';
 
 export const unifiedSearch = async (req, res, next) => {
   try {
-    const searchMode = req.headers['x-search-mode'];
     const embedding = req.body?.embedding;
-
-    // Use hybrid search if embedding provided via POST from Worker
     const params = { ...req.query, embedding };
 
     const results = embedding && Array.isArray(embedding)
@@ -15,6 +12,19 @@ export const unifiedSearch = async (req, res, next) => {
     res.json({
       success: true,
       data: results
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getFilters = async (req, res, next) => {
+  try {
+    const filters = await searchService.getAvailableFilters(req.query);
+
+    res.json({
+      success: true,
+      data: filters
     });
   } catch (error) {
     next(error);

@@ -11,13 +11,24 @@ const searchParams = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
-// Wrap in query object to match validate middleware structure
+const filterParams = z.object({
+  query: z.string().optional().transform(val => val || undefined),
+  category: z.string().optional().transform(val => val || undefined),
+  subcategory: z.string().optional().transform(val => val || undefined),
+  color: z.string().optional().transform(val => val || undefined),
+  brand: z.string().optional().transform(val => val || undefined),
+});
+
 export const unifiedSearchSchema = z.object({
   query: searchParams
 });
 
 export const smartSearchSchema = z.object({
   query: searchParams
+});
+
+export const filtersSchema = z.object({
+  query: filterParams
 });
 
 export const searchSuggestionsSchema = z.object({

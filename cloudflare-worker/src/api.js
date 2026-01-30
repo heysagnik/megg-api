@@ -777,10 +777,64 @@ app.all('/api/notifications', async (c) => {
   }
 });
 
+app.get('/api/search/filters', async (c) => {
+  try {
+    const url = new URL(c.req.url);
+    const cacheKey = `search:filters:${url.search}`;
+    
+    const cached = await c.env.CACHE.get(cacheKey, 'json');
+    if (cached) return c.json(cached);
+
+    const vercelUrl = c.env.ORIGIN_URL + '/api/search/filters' + url.search;
+    const response = await fetch(vercelUrl, {
+      method: 'GET',
+      headers: c.req.raw.headers,
+    });
+    const data = await response.json();
+
+    if (response.ok) {
+      c.executionCtx.waitUntil(
+        c.env.CACHE.put(cacheKey, JSON.stringify(data), { expirationTtl: CACHE_TTL.SEARCH })
+      );
+    }
+
+    return c.json(data, response.status);
+  } catch (error) {
+    return c.json({ error: 'Filters service unavailable' }, 502);
+  }
+});
+
+app.get('/api/search/suggestions', async (c) => {
+  try {
+    const url = new URL(c.req.url);
+    const cacheKey = `search:suggestions:${url.search}`;
+    
+    const cached = await c.env.CACHE.get(cacheKey, 'json');
+    if (cached) return c.json(cached);
+
+    const vercelUrl = c.env.ORIGIN_URL + '/api/search/suggestions' + url.search;
+    const response = await fetch(vercelUrl, {
+      method: 'GET',
+      headers: c.req.raw.headers,
+    });
+    const data = await response.json();
+
+    if (response.ok) {
+      c.executionCtx.waitUntil(
+        c.env.CACHE.put(cacheKey, JSON.stringify(data), { expirationTtl: CACHE_TTL.SEARCH })
+      );
+    }
+
+    return c.json(data, response.status);
+  } catch (error) {
+    return c.json({ error: 'Suggestions service unavailable' }, 502);
+  }
+});
+
 app.all('/api/search', async (c) => {
   try {
     const url = new URL(c.req.url);
-    const cacheKey = `search:${url.search}`;
+    const cacheKey = `search:v2:${url.search}`;
     
     const cached = await c.env.CACHE.get(cacheKey, 'json');
     if (cached) return c.json(cached);
@@ -789,6 +843,7 @@ app.all('/api/search', async (c) => {
     const response = await fetch(vercelUrl, {
       method: c.req.method,
       headers: c.req.raw.headers,
+      body: c.req.method !== 'GET' ? await c.req.text() : undefined
     });
     const data = await response.json();
 
