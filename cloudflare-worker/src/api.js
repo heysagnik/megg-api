@@ -223,49 +223,65 @@ app.get('/api/products/brand/:brand', async (c) => {
         : sort === 'newest' ? 'created_at DESC'
           : 'popularity DESC';
 
+    const whereClause = conditions.join(' AND ');
+    const countParams = params.slice(0, paramIdx - 2);
+
     const [products, categories, subcategories, colors, totalCount] = await Promise.all([
-      sql(`
-        SELECT id, name, price, brand, images, category::text as category, subcategory::text as subcategory, color, affiliate_link, popularity
-        FROM products
-        WHERE ${conditions.join(' AND ')}
-        ORDER BY ${orderBy}
-        LIMIT $${limitIdx} OFFSET $${offsetIdx}
-      `, params),
+      sql(
+        `SELECT id, name, price, brand, images, category::text as category, subcategory::text as subcategory, color, affiliate_link, popularity
+         FROM products
+         WHERE ${whereClause}
+         ORDER BY ${orderBy}
+         LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+        params
+      ),
 
-      sql(`
-        SELECT category::text as name, COUNT(*)::int as count
-        FROM products
-        WHERE is_active = true AND brand ILIKE $1
-        GROUP BY category
-        ORDER BY count DESC
-      `, [`%${brand}%`]),
+      sql(
+        `SELECT category::text as name, COUNT(*)::int as count
+         FROM products
+         WHERE is_active = true AND brand ILIKE $1
+         GROUP BY category
+         ORDER BY count DESC`,
+        [`%${brand}%`]
+      ),
 
-      category ? sql(`
-        SELECT subcategory::text as name, COUNT(*)::int as count
-        FROM products
-        WHERE is_active = true AND brand ILIKE $1 AND category::text ILIKE $2
-        GROUP BY subcategory
-        HAVING subcategory IS NOT NULL AND subcategory::text != ''
-        ORDER BY count DESC
-        LIMIT 30
-      `, [`%${brand}%`, `%${category}%`]) : Promise.resolve([]),
+      category ? sql(
+        `SELECT subcategory::text as name, COUNT(*)::int as count
+         FROM products
+         WHERE is_active = true AND brand ILIKE $1 AND category::text ILIKE $2
+         GROUP BY subcategory
+         HAVING subcategory IS NOT NULL AND subcategory::text != ''
+         ORDER BY count DESC
+         LIMIT 30`,
+        [`%${brand}%`, `%${category}%`]
+      ) : Promise.resolve([]),
 
-      sql(`
-        SELECT TRIM(color) as name, COUNT(*)::int as count
-        FROM products
-        WHERE is_active = true AND brand ILIKE $1
-        ${category ? 'AND category::text ILIKE $2' : ''}
-        GROUP BY TRIM(color)
-        HAVING TRIM(color) IS NOT NULL AND TRIM(color) != ''
-        ORDER BY count DESC
-        LIMIT 30
-      `, category ? [`%${brand}%`, `%${category}%`] : [`%${brand}%`]),
+      category ? sql(
+        `SELECT TRIM(color) as name, COUNT(*)::int as count
+         FROM products
+         WHERE is_active = true AND brand ILIKE $1 AND category::text ILIKE $2
+         GROUP BY TRIM(color)
+         HAVING TRIM(color) IS NOT NULL AND TRIM(color) != ''
+         ORDER BY count DESC
+         LIMIT 30`,
+        [`%${brand}%`, `%${category}%`]
+      ) : sql(
+        `SELECT TRIM(color) as name, COUNT(*)::int as count
+         FROM products
+         WHERE is_active = true AND brand ILIKE $1
+         GROUP BY TRIM(color)
+         HAVING TRIM(color) IS NOT NULL AND TRIM(color) != ''
+         ORDER BY count DESC
+         LIMIT 30`,
+        [`%${brand}%`]
+      ),
 
-      sql(`
-        SELECT COUNT(*)::int as count
-        FROM products
-        WHERE ${conditions.join(' AND ')}
-      `, params.slice(0, paramIdx - 2))
+      sql(
+        `SELECT COUNT(*)::int as count
+         FROM products
+         WHERE ${whereClause}`,
+        countParams
+      )
     ]);
 
     const total = totalCount[0]?.count || 0;
