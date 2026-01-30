@@ -1,20 +1,21 @@
 {
   "name": "megg-api",
   "version": "1.0.0",
-  "description": "Fashion discovery backend API with Node.js, Express.js, Supabase, and Cloudinary",
+  "description": "Fashion discovery backend API with Node.js, Express.js, Neon PostgreSQL, and Cloudflare R2",
   "main": "src/index.js",
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
     "dev": "node -r dotenv/config --watch src/index.js",
-    "migrate:check": "node scripts/pre-migration-check.js",
-    "migrate:supabase-to-neon": "node scripts/migrate-supabase-to-neon.js"
+    "cleanup:r2-reels": "node -r dotenv/config scripts/cleanup-r2-reels.js",
+    "test:endpoints": "node -r dotenv/config scripts/test-endpoints.js"
   },
   "keywords": [
     "fashion",
     "api",
     "express",
-    "supabase"
+    "neon",
+    "cloudflare"
   ],
   "author": "",
   "license": "MIT",
@@ -32,6 +33,7 @@
     "express-rate-limit": "^7.1.5",
     "firebase-admin": "^13.6.0",
     "fluent-ffmpeg": "^2.1.3",
+    "groq-sdk": "^0.37.0",
     "helmet": "^7.1.0",
     "multer": "^2.0.2",
     "node-fetch": "^3.3.2",

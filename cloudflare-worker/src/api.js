@@ -3,12 +3,28 @@ import { cors } from 'hono/cors';
 import { neon } from '@neondatabase/serverless';
 import { auth } from './routes/auth.js';
 import { wishlist } from './routes/wishlist.js';
-import { search } from './routes/search.js';
 import { handleImageOptimization } from './imageOptimizer.js';
 
 const app = new Hono();
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const CACHE_TTL = {
+  PRODUCT_DETAIL: 1800,
+  PRODUCT_LIST: 900,
+  RECOMMENDATIONS: 1800,
+  VARIANTS: 1800,
+  CATEGORIES: 3600,
+  SUBCATEGORIES: 3600,
+  REELS: 900,
+  REEL_DETAIL: 900,
+  COLOR_COMBOS: 3600,
+  COMBO_DETAIL: 3600,
+  OFFERS: 900,
+  TRENDING: 300,
+  BANNERS: 3600,
+  SEARCH: 60
+};
 
 const VALID_SORTS = {
   popularity: 'popularity DESC',
@@ -34,8 +50,6 @@ const validatePagination = (pageStr, limitStr) => {
 
 app.route('/api/auth', auth);
 app.route('/api/wishlist', wishlist);
-// Search is proxied to Vercel due to SQL compatibility issues
-// app.route('/api/search', search);
 
 app.get('/api/optimize', async (c) => {
   return handleImageOptimization(c.req.raw, c.env);
@@ -48,8 +62,7 @@ app.get('/api/products', async (c) => {
     const { category, subcategory, sort = 'popularity' } = c.req.query();
     const { page, limit, offset } = validatePagination(c.req.query('page'), c.req.query('limit'));
 
-    const orderBy = VALID_SORTS[sort] || VALID_SORTS.popularity;
-    const cacheKey = `products:${category || 'all'}:${subcategory || 'all'}:${page}:${sort}`;
+    const cacheKey = `products:${category || 'all'}:${subcategory || 'all'}:${page}:${limit}:${sort}`;
 
     const cached = await c.env.CACHE.get(cacheKey, 'json');
     if (cached) return c.json(cached);
@@ -84,11 +97,13 @@ app.get('/api/products', async (c) => {
     }
 
     const result = { products, page, limit };
-    await c.env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: 900 });
+    
+    c.executionCtx.waitUntil(
+      c.env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: CACHE_TTL.PRODUCT_LIST })
+    );
 
     return c.json(result);
   } catch (error) {
-    console.error('Products fetch error:', error.message);
     return c.json({ error: 'Failed to fetch products' }, 500);
   }
 });
@@ -99,7 +114,7 @@ app.get('/api/products/browse/:category', async (c) => {
     const { subcategory, color, sort = 'popularity' } = c.req.query();
     const { page, limit, offset } = validatePagination(c.req.query('page'), c.req.query('limit'));
 
-    const cacheKey = `browse:${category}:${subcategory || 'all'}:${color || 'all'}:${page}:${sort}`;
+    const cacheKey = `browse:${category}:${subcategory || 'all'}:${color || 'all'}:${page}:${limit}:${sort}`;
 
     const cached = await c.env.CACHE.get(cacheKey, 'json');
     if (cached) return c.json(cached);
@@ -157,10 +172,12 @@ app.get('/api/products/browse/:category', async (c) => {
       appliedFilters: { subcategory, color, sort }
     };
 
-    await c.env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: 900 });
+    c.executionCtx.waitUntil(
+      c.env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: CACHE_TTL.PRODUCT_LIST })
+    );
+
     return c.json(result);
   } catch (error) {
-    console.error('Browse fetch error:', error.message);
     return c.json({ error: 'Failed to browse products' }, 500);
   }
 });
@@ -172,6 +189,10 @@ app.get('/api/products/:id', async (c) => {
       return c.json({ error: 'Invalid product ID format' }, 400);
     }
 
+    const cacheKey = `product:${id}`;
+    const cached = await c.env.CACHE.get(cacheKey, 'json');
+    if (cached) return c.json(cached);
+
     const sql = getDB(c.env);
     const [product] = await sql`
       SELECT id, name, description, price, brand, images, category, subcategory, color, fabric, affiliate_link, is_active, clicks, popularity
@@ -180,41 +201,47 @@ app.get('/api/products/:id', async (c) => {
 
     if (!product) return c.json({ error: 'Product not found' }, 404);
 
-    const variants = await sql`
-      SELECT id, color, images
-      FROM products
-      WHERE brand = ${product.brand}
-      AND name ILIKE ${product.name}
-      AND id != ${id}
-      AND is_active = true
-      LIMIT 10
-    `;
+    const [variants, recommended] = await Promise.all([
+      sql`
+        SELECT id, color, images
+        FROM products
+        WHERE brand = ${product.brand}
+        AND name ILIKE ${product.name}
+        AND id != ${id}
+        AND is_active = true
+        LIMIT 10
+      `,
+      product.subcategory
+        ? sql`
+            SELECT id, name, price, brand, images, color, category, subcategory, affiliate_link
+            FROM products
+            WHERE id != ${id}
+            AND is_active = true
+            AND subcategory::text = ${product.subcategory}
+            ORDER BY popularity DESC
+            LIMIT 8
+          `
+        : sql`
+            SELECT id, name, price, brand, images, color, category, subcategory, affiliate_link
+            FROM products
+            WHERE id != ${id}
+            AND is_active = true
+            AND category::text = ${product.category}
+            ORDER BY popularity DESC
+            LIMIT 8
+          `
+    ]);
 
-    const recommended = product.subcategory
-      ? await sql`
-          SELECT id, name, price, brand, images, color, category, subcategory, affiliate_link
-          FROM products
-          WHERE id != ${id}
-          AND is_active = true
-          AND subcategory::text = ${product.subcategory}
-          ORDER BY popularity DESC
-          LIMIT 8
-        `
-      : await sql`
-          SELECT id, name, price, brand, images, color, category, subcategory, affiliate_link
-          FROM products
-          WHERE id != ${id}
-          AND is_active = true
-          AND category::text = ${product.category}
-          ORDER BY popularity DESC
-          LIMIT 8
-        `;
+    sql`UPDATE products SET popularity = popularity + 1 WHERE id = ${id}`.catch(() => {});
 
-    sql`UPDATE products SET popularity = popularity + 1 WHERE id = ${id}`.catch(() => { });
+    const result = { product, variants: variants || [], recommended: recommended || [] };
 
-    return c.json({ product, variants: variants || [], recommended: recommended || [] });
+    c.executionCtx.waitUntil(
+      c.env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: CACHE_TTL.PRODUCT_DETAIL })
+    );
+
+    return c.json(result);
   } catch (error) {
-    console.error('Product fetch error:', error.message);
     return c.json({ error: 'Failed to fetch product' }, 500);
   }
 });
@@ -226,35 +253,43 @@ app.get('/api/products/:id/recommendations', async (c) => {
       return c.json({ error: 'Invalid product ID format' }, 400);
     }
 
+    const cacheKey = `product:${id}:recs`;
+    const cached = await c.env.CACHE.get(cacheKey, 'json');
+    if (cached) return c.json(cached);
+
     const sql = getDB(c.env);
     const [product] = await sql`SELECT subcategory, category FROM products WHERE id = ${id}`;
 
     if (!product) return c.json({ error: 'Product not found' }, 404);
 
-    let recommendations;
-    if (product.subcategory) {
-      recommendations = await sql`
-        SELECT id, name, price, brand, images, color, category, subcategory, affiliate_link, popularity
-        FROM products
-        WHERE id != ${id}
-        AND subcategory::text = ${product.subcategory}::text
-        ORDER BY popularity DESC
-        LIMIT 12
-      `;
-    } else {
-      recommendations = await sql`
-        SELECT id, name, price, brand, images, color, category, subcategory, affiliate_link, popularity
-        FROM products
-        WHERE id != ${id}
-        AND category::text = ${product.category}::text
-        ORDER BY popularity DESC
-        LIMIT 12
-      `;
-    }
+    const recommendations = product.subcategory
+      ? await sql`
+          SELECT id, name, price, brand, images, color, category, subcategory, affiliate_link, popularity
+          FROM products
+          WHERE id != ${id}
+          AND is_active = true
+          AND subcategory::text = ${product.subcategory}
+          ORDER BY popularity DESC
+          LIMIT 12
+        `
+      : await sql`
+          SELECT id, name, price, brand, images, color, category, subcategory, affiliate_link, popularity
+          FROM products
+          WHERE id != ${id}
+          AND is_active = true
+          AND category::text = ${product.category}
+          ORDER BY popularity DESC
+          LIMIT 12
+        `;
 
-    return c.json({ products: recommendations });
+    const result = { products: recommendations };
+
+    c.executionCtx.waitUntil(
+      c.env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: CACHE_TTL.RECOMMENDATIONS })
+    );
+
+    return c.json(result);
   } catch (error) {
-    console.error('Recommendations fetch error:', error.message);
     return c.json({ error: 'Failed to fetch recommendations' }, 500);
   }
 });
@@ -266,44 +301,53 @@ app.get('/api/products/:id/variants', async (c) => {
       return c.json({ error: 'Invalid product ID format' }, 400);
     }
 
+    const cacheKey = `product:${id}:variants`;
+    const cached = await c.env.CACHE.get(cacheKey, 'json');
+    if (cached) return c.json(cached);
+
     const sql = getDB(c.env);
     const [product] = await sql`SELECT name, brand, subcategory, category FROM products WHERE id = ${id}`;
 
     if (!product) return c.json({ error: 'Product not found' }, 404);
 
-    let variants;
-    if (product.subcategory) {
-      variants = await sql`
-        SELECT id, name, price, brand, images, color, category, subcategory
-        FROM products
-        WHERE brand = ${product.brand}
-        AND name ILIKE ${product.name}
-        AND id != ${id}
-        AND subcategory::text = ${product.subcategory}::text
-        LIMIT 10
-      `;
-    } else {
-      variants = await sql`
-        SELECT id, name, price, brand, images, color, category, subcategory
-        FROM products
-        WHERE brand = ${product.brand}
-        AND name ILIKE ${product.name}
-        AND id != ${id}
-        AND category::text = ${product.category}::text
-        LIMIT 10
-      `;
-    }
+    const variants = product.subcategory
+      ? await sql`
+          SELECT id, name, price, brand, images, color, category, subcategory
+          FROM products
+          WHERE brand = ${product.brand}
+          AND name ILIKE ${product.name}
+          AND id != ${id}
+          AND is_active = true
+          AND subcategory::text = ${product.subcategory}
+          LIMIT 10
+        `
+      : await sql`
+          SELECT id, name, price, brand, images, color, category, subcategory
+          FROM products
+          WHERE brand = ${product.brand}
+          AND name ILIKE ${product.name}
+          AND id != ${id}
+          AND is_active = true
+          AND category::text = ${product.category}
+          LIMIT 10
+        `;
 
-    return c.json({ variants: variants || [] });
+    const result = { variants: variants || [] };
+
+    c.executionCtx.waitUntil(
+      c.env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: CACHE_TTL.VARIANTS })
+    );
+
+    return c.json(result);
   } catch (error) {
-    console.error('Variants fetch error:', error.message);
     return c.json({ error: 'Failed to fetch variants' }, 500);
   }
 });
 
 app.get('/api/categories', async (c) => {
   try {
-    const cached = await c.env.CACHE.get('categories:all', 'json');
+    const cacheKey = 'categories:all';
+    const cached = await c.env.CACHE.get(cacheKey, 'json');
     if (cached) return c.json(cached);
 
     const sql = getDB(c.env);
@@ -311,10 +355,12 @@ app.get('/api/categories', async (c) => {
       SELECT DISTINCT category FROM products WHERE is_active = true ORDER BY category
     `;
 
-    await c.env.CACHE.put('categories:all', JSON.stringify(categories), { expirationTtl: 3600 });
+    c.executionCtx.waitUntil(
+      c.env.CACHE.put(cacheKey, JSON.stringify(categories), { expirationTtl: CACHE_TTL.CATEGORIES })
+    );
+
     return c.json(categories);
   } catch (error) {
-    console.error('Categories fetch error:', error.message);
     return c.json({ error: 'Failed to fetch categories' }, 500);
   }
 });
@@ -339,10 +385,12 @@ app.get('/api/subcategories/:category', async (c) => {
       ORDER BY display_order, name
     `;
 
-    await c.env.CACHE.put(cacheKey, JSON.stringify(results), { expirationTtl: 3600 });
+    c.executionCtx.waitUntil(
+      c.env.CACHE.put(cacheKey, JSON.stringify(results), { expirationTtl: CACHE_TTL.SUBCATEGORIES })
+    );
+
     return c.json({ success: true, data: results });
   } catch (error) {
-    console.error('Subcategories fetch error:', error.message);
     return c.json({ error: 'Failed to fetch subcategories' }, 500);
   }
 });
@@ -357,24 +405,23 @@ app.get('/api/reels', async (c) => {
 
     const sql = getDB(c.env);
 
-    let reels;
-    if (category) {
-      reels = await sql`
-        SELECT id, category, video_url, thumbnail_url, product_ids, views, likes, created_at
-        FROM reels WHERE category = ${category}
-        ORDER BY created_at DESC
-      `;
-    } else {
-      reels = await sql`
-        SELECT id, category, video_url, thumbnail_url, product_ids, views, likes, created_at
-        FROM reels ORDER BY created_at DESC
-      `;
-    }
+    const reels = category
+      ? await sql`
+          SELECT id, category, video_url, thumbnail_url, product_ids, views, likes, created_at
+          FROM reels WHERE category = ${category}
+          ORDER BY created_at DESC
+        `
+      : await sql`
+          SELECT id, category, video_url, thumbnail_url, product_ids, views, likes, created_at
+          FROM reels ORDER BY created_at DESC
+        `;
 
-    await c.env.CACHE.put(cacheKey, JSON.stringify(reels), { expirationTtl: 900 });
+    c.executionCtx.waitUntil(
+      c.env.CACHE.put(cacheKey, JSON.stringify(reels), { expirationTtl: CACHE_TTL.REELS })
+    );
+
     return c.json(reels);
   } catch (error) {
-    console.error('Reels fetch error:', error.message);
     return c.json({ error: 'Failed to fetch reels' }, 500);
   }
 });
@@ -386,22 +433,31 @@ app.get('/api/reels/:id', async (c) => {
       return c.json({ error: 'Invalid reel ID format' }, 400);
     }
 
+    const cacheKey = `reel:${id}`;
+    const cached = await c.env.CACHE.get(cacheKey, 'json');
+    if (cached) return c.json(cached);
+
     const sql = getDB(c.env);
     const [reel] = await sql`SELECT * FROM reels WHERE id = ${id}`;
 
     if (!reel) return c.json({ error: 'Reel not found' }, 404);
 
+    let products = [];
     if (reel.product_ids && reel.product_ids.length > 0) {
-      const products = await sql`
+      products = await sql`
         SELECT id, name, price, brand, images, category, color, affiliate_link
         FROM products WHERE id = ANY(${reel.product_ids})
       `;
-      return c.json({ reel, products });
     }
 
-    return c.json({ reel, products: [] });
+    const result = { reel, products };
+
+    c.executionCtx.waitUntil(
+      c.env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: CACHE_TTL.REEL_DETAIL })
+    );
+
+    return c.json(result);
   } catch (error) {
-    console.error('Reel fetch error:', error.message);
     return c.json({ error: 'Failed to fetch reel' }, 500);
   }
 });
@@ -416,28 +472,20 @@ app.get('/api/color-combos', async (c) => {
 
     const sql = getDB(c.env);
 
-    let combos;
-    if (group_type) {
-      combos = await sql`
-        SELECT id, name, model_image, product_ids, color_a, color_b, color_c, group_type
-        FROM color_combos WHERE group_type = ${group_type}
-        ORDER BY name
-      `;
-    } else {
-      combos = await sql`
-        SELECT id, name, model_image, product_ids, color_a, color_b, color_c, group_type
-        FROM color_combos ORDER BY name
-      `;
-    }
+    let combos = group_type
+      ? await sql`
+          SELECT id, name, model_image, product_ids, color_a, color_b, color_c, group_type
+          FROM color_combos WHERE group_type = ${group_type}
+          ORDER BY name
+        `
+      : await sql`
+          SELECT id, name, model_image, product_ids, color_a, color_b, color_c, group_type
+          FROM color_combos ORDER BY name
+        `;
 
-    // Apply color filters in memory (simpler than dynamic SQL construction with this driver)
     if (combos) {
-      if (color_a) {
-        combos = combos.filter(c => c.color_a === color_a);
-      }
-      if (color_b) {
-        combos = combos.filter(c => c.color_b === color_b);
-      }
+      if (color_a) combos = combos.filter(c => c.color_a === color_a);
+      if (color_b) combos = combos.filter(c => c.color_b === color_b);
     }
 
     const meta = {
@@ -448,15 +496,14 @@ app.get('/api/color-combos', async (c) => {
       }
     };
 
-    const result = {
-      combos: combos || [],
-      meta
-    };
+    const result = { combos: combos || [], meta };
 
-    await c.env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: 3600 });
+    c.executionCtx.waitUntil(
+      c.env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: CACHE_TTL.COLOR_COMBOS })
+    );
+
     return c.json(result);
   } catch (error) {
-    console.error('Color combos fetch error:', error.message);
     return c.json({ error: 'Failed to fetch color combos' }, 500);
   }
 });
@@ -468,22 +515,31 @@ app.get('/api/color-combos/:id', async (c) => {
       return c.json({ error: 'Invalid color combo ID format' }, 400);
     }
 
+    const cacheKey = `combo:${id}`;
+    const cached = await c.env.CACHE.get(cacheKey, 'json');
+    if (cached) return c.json(cached);
+
     const sql = getDB(c.env);
     const [combo] = await sql`SELECT * FROM color_combos WHERE id = ${id}`;
 
     if (!combo) return c.json({ error: 'Color combo not found' }, 404);
 
+    let products = [];
     if (combo.product_ids && combo.product_ids.length > 0) {
-      const products = await sql`
+      products = await sql`
         SELECT id, name, price, brand, images, category, color, affiliate_link
         FROM products WHERE id = ANY(${combo.product_ids})
       `;
-      return c.json({ combo, products });
     }
 
-    return c.json({ combo, products: [] });
+    const result = { combo, products };
+
+    c.executionCtx.waitUntil(
+      c.env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: CACHE_TTL.COMBO_DETAIL })
+    );
+
+    return c.json(result);
   } catch (error) {
-    console.error('Color combo fetch error:', error.message);
     return c.json({ error: 'Failed to fetch color combo' }, 500);
   }
 });
@@ -494,6 +550,10 @@ app.get('/api/color-combos/:id/recommendations', async (c) => {
     if (!UUID_REGEX.test(id)) {
       return c.json({ error: 'Invalid color combo ID format' }, 400);
     }
+
+    const cacheKey = `combo:${id}:recs`;
+    const cached = await c.env.CACHE.get(cacheKey, 'json');
+    if (cached) return c.json(cached);
 
     const sql = getDB(c.env);
     const [combo] = await sql`SELECT group_type FROM color_combos WHERE id = ${id}`;
@@ -509,16 +569,22 @@ app.get('/api/color-combos/:id/recommendations', async (c) => {
       LIMIT 10
     `;
 
-    return c.json({ recommendations: recommendations || [] });
+    const result = { recommendations: recommendations || [] };
+
+    c.executionCtx.waitUntil(
+      c.env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: CACHE_TTL.COLOR_COMBOS })
+    );
+
+    return c.json(result);
   } catch (error) {
-    console.error('Color combo recommendations fetch error:', error.message);
     return c.json({ error: 'Failed to fetch recommendations' }, 500);
   }
 });
 
 app.get('/api/offers', async (c) => {
   try {
-    const cached = await c.env.CACHE.get('offers:all', 'json');
+    const cacheKey = 'offers:all';
+    const cached = await c.env.CACHE.get(cacheKey, 'json');
     if (cached) return c.json(cached);
 
     const sql = getDB(c.env);
@@ -527,10 +593,12 @@ app.get('/api/offers', async (c) => {
       FROM offers ORDER BY created_at DESC
     `;
 
-    await c.env.CACHE.put('offers:all', JSON.stringify(offers), { expirationTtl: 900 });
+    c.executionCtx.waitUntil(
+      c.env.CACHE.put(cacheKey, JSON.stringify(offers), { expirationTtl: CACHE_TTL.OFFERS })
+    );
+
     return c.json(offers);
   } catch (error) {
-    console.error('Offers fetch error:', error.message);
     return c.json({ error: 'Failed to fetch offers' }, 500);
   }
 });
@@ -553,10 +621,12 @@ app.get('/api/trending', async (c) => {
       LIMIT ${limit}
     `;
 
-    await c.env.CACHE.put(cacheKey, JSON.stringify(products), { expirationTtl: 300 });
+    c.executionCtx.waitUntil(
+      c.env.CACHE.put(cacheKey, JSON.stringify(products), { expirationTtl: CACHE_TTL.TRENDING })
+    );
+
     return c.json(products);
   } catch (error) {
-    console.error('Trending fetch error:', error.message);
     return c.json({ error: 'Failed to fetch trending products' }, 500);
   }
 });
@@ -571,22 +641,21 @@ app.get('/api/banners', async (c) => {
 
     const sql = getDB(c.env);
 
-    let banners;
-    if (category) {
-      banners = await sql`
-        SELECT * FROM category_banners WHERE category = ${category}
-        ORDER BY display_order
-      `;
-    } else {
-      banners = await sql`
-        SELECT * FROM category_banners ORDER BY display_order
-      `;
-    }
+    const banners = category
+      ? await sql`
+          SELECT * FROM category_banners WHERE category = ${category}
+          ORDER BY display_order
+        `
+      : await sql`
+          SELECT * FROM category_banners ORDER BY display_order
+        `;
 
-    await c.env.CACHE.put(cacheKey, JSON.stringify(banners), { expirationTtl: 3600 });
+    c.executionCtx.waitUntil(
+      c.env.CACHE.put(cacheKey, JSON.stringify(banners), { expirationTtl: CACHE_TTL.BANNERS })
+    );
+
     return c.json(banners);
   } catch (error) {
-    console.error('Banners fetch error:', error.message);
     return c.json({ error: 'Failed to fetch banners' }, 500);
   }
 });
@@ -600,7 +669,6 @@ app.all('/api/upload/*', async (c) => {
       body: c.req.method !== 'GET' ? await c.req.arrayBuffer() : undefined
     });
   } catch (error) {
-    console.error('Upload proxy error:', error.message);
     return c.json({ error: 'Upload service unavailable' }, 502);
   }
 });
@@ -614,86 +682,124 @@ app.all('/api/admin/*', async (c) => {
       body: c.req.method !== 'GET' ? await c.req.text() : undefined
     });
   } catch (error) {
-    console.error('Admin proxy error:', error.message);
     return c.json({ error: 'Admin service unavailable' }, 502);
   }
 });
 
 app.all('/api/outfits', async (c) => {
   try {
+    const cacheKey = `outfits:list`;
+    const cached = await c.env.CACHE.get(cacheKey, 'json');
+    if (cached && c.req.method === 'GET') return c.json(cached);
+
     const vercelUrl = c.env.ORIGIN_URL + c.req.path + (c.req.url.includes('?') ? '?' + c.req.url.split('?')[1] : '');
     const response = await fetch(vercelUrl, {
       method: c.req.method,
       headers: c.req.raw.headers,
     });
     const data = await response.json();
+
+    if (c.req.method === 'GET' && response.ok) {
+      c.executionCtx.waitUntil(
+        c.env.CACHE.put(cacheKey, JSON.stringify(data), { expirationTtl: CACHE_TTL.REELS })
+      );
+    }
+
     return c.json(data, response.status);
   } catch (error) {
-    console.error('Outfits proxy error:', error.message);
     return c.json({ error: 'Outfits service unavailable' }, 502);
   }
 });
 
 app.all('/api/outfits/:id', async (c) => {
   try {
+    const id = c.req.param('id');
+    const cacheKey = `outfit:${id}`;
+    const cached = await c.env.CACHE.get(cacheKey, 'json');
+    if (cached && c.req.method === 'GET') return c.json(cached);
+
     const vercelUrl = c.env.ORIGIN_URL + c.req.path;
     const response = await fetch(vercelUrl, {
       method: c.req.method,
       headers: c.req.raw.headers,
     });
     const data = await response.json();
+
+    if (c.req.method === 'GET' && response.ok) {
+      c.executionCtx.waitUntil(
+        c.env.CACHE.put(cacheKey, JSON.stringify(data), { expirationTtl: CACHE_TTL.REELS })
+      );
+    }
+
     return c.json(data, response.status);
   } catch (error) {
-    console.error('Outfits proxy error:', error.message);
     return c.json({ error: 'Outfits service unavailable' }, 502);
   }
 });
 
-// Proxy FCM to Vercel
 app.all('/api/fcm', async (c) => {
   try {
     const vercelUrl = c.env.ORIGIN_URL + c.req.path;
     const response = await fetch(vercelUrl, {
       method: c.req.method,
       headers: c.req.raw.headers,
+      body: c.req.method !== 'GET' ? await c.req.text() : undefined
     });
     const data = await response.json();
     return c.json(data, response.status);
   } catch (error) {
-    console.error('FCM proxy error:', error.message);
     return c.json({ error: 'FCM service unavailable' }, 502);
   }
 });
 
-// Proxy notifications to Vercel
 app.all('/api/notifications', async (c) => {
   try {
+    const cacheKey = 'notifications:all';
+    const cached = await c.env.CACHE.get(cacheKey, 'json');
+    if (cached && c.req.method === 'GET') return c.json(cached);
+
     const vercelUrl = c.env.ORIGIN_URL + c.req.path;
     const response = await fetch(vercelUrl, {
       method: c.req.method,
       headers: c.req.raw.headers,
     });
     const data = await response.json();
+
+    if (c.req.method === 'GET' && response.ok) {
+      c.executionCtx.waitUntil(
+        c.env.CACHE.put(cacheKey, JSON.stringify(data), { expirationTtl: 300 })
+      );
+    }
+
     return c.json(data, response.status);
   } catch (error) {
-    console.error('Notifications proxy error:', error.message);
     return c.json({ error: 'Notifications service unavailable' }, 502);
   }
 });
 
-// Proxy search to Vercel (complex SQL queries work better there)
 app.all('/api/search', async (c) => {
   try {
     const url = new URL(c.req.url);
+    const cacheKey = `search:${url.search}`;
+    
+    const cached = await c.env.CACHE.get(cacheKey, 'json');
+    if (cached) return c.json(cached);
+
     const vercelUrl = c.env.ORIGIN_URL + '/api/search' + url.search;
     const response = await fetch(vercelUrl, {
       method: c.req.method,
       headers: c.req.raw.headers,
     });
     const data = await response.json();
+
+    if (response.ok) {
+      c.executionCtx.waitUntil(
+        c.env.CACHE.put(cacheKey, JSON.stringify(data), { expirationTtl: CACHE_TTL.SEARCH })
+      );
+    }
+
     return c.json(data, response.status);
   } catch (error) {
-    console.error('Search proxy error:', error.message);
     return c.json({ error: 'Search service unavailable' }, 502);
   }
 });
@@ -701,7 +807,6 @@ app.all('/api/search', async (c) => {
 app.notFound((c) => c.json({ error: 'Endpoint not found' }, 404));
 
 app.onError((err, c) => {
-  console.error('Unhandled error:', err.message);
   return c.json({ error: 'Internal server error' }, 500);
 });
 

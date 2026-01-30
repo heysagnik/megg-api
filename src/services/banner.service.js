@@ -2,27 +2,32 @@ import { sql } from '../config/neon.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 import { uploadBannerImage, deleteProductImage } from './upload.service.js';
 import { bannerSchema, updateBannerSchema } from '../validators/banner.validators.js';
+import { getCached, invalidateCacheByPrefix, CACHE_TTL } from '../utils/cache.js';
 
 export const listBanners = async (category = null) => {
-  const conditions = [];
-  const values = [];
+  const cacheKey = `banners:${category || 'all'}`;
 
-  if (category) {
-    conditions.push('category = $1');
-    values.push(category);
-  }
+  return getCached(cacheKey, CACHE_TTL.CATEGORY_BANNERS, async () => {
+    const conditions = [];
+    const values = [];
 
-  const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    if (category) {
+      conditions.push('category = $1');
+      values.push(category);
+    }
 
-  const query = `
-    SELECT id, banner_image, link, display_order, category
-    FROM category_banners
-    ${whereClause}
-    ORDER BY display_order ASC
-  `;
+    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
-  const data = await sql(query, values);
-  return data || [];
+    const query = `
+      SELECT id, banner_image, link, display_order, category
+      FROM category_banners
+      ${whereClause}
+      ORDER BY display_order ASC
+    `;
+
+    const data = await sql(query, values);
+    return data || [];
+  });
 };
 
 export const getBannerById = async (id) => {
@@ -51,6 +56,8 @@ export const createBanner = async (bannerData, file) => {
       `INSERT INTO category_banners (${cols}) VALUES (${vals}) RETURNING *`,
       values
     );
+
+    invalidateCacheByPrefix('banners:').catch(() => {});
 
     return banner;
   } catch (error) {
@@ -82,6 +89,9 @@ export const updateBanner = async (id, updates, file) => {
       `UPDATE category_banners SET ${setFragments.join(', ')} WHERE id = $1 RETURNING *`,
       values
     );
+
+    invalidateCacheByPrefix('banners:').catch(() => {});
+
     return banner;
   } catch (error) {
     if (file) await deleteProductImage(imageUrl);
@@ -93,5 +103,8 @@ export const deleteBanner = async (id) => {
   const banner = await getBannerById(id);
   if (banner.banner_image) await deleteProductImage(banner.banner_image);
   await sql('DELETE FROM category_banners WHERE id = $1', [id]);
+
+  invalidateCacheByPrefix('banners:').catch(() => {});
+
   return true;
 };

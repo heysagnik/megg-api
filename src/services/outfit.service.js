@@ -1,39 +1,47 @@
 import { sql } from '../config/neon.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
-import logger from '../utils/logger.js';
 import { outfitSchema } from '../validators/outfit.validators.js';
+import { getCached, invalidateCacheByPrefix, CACHE_TTL } from '../utils/cache.js';
 
 export const listOutfits = async ({ page = 1, limit = 20 } = {}) => {
   const p = Number(page) || 1;
   const l = Number(limit) || 20;
-  const offset = (p - 1) * l;
+  const cacheKey = `outfits:${p}:${l}`;
 
-  const [outfits, countResult] = await Promise.all([
-    sql(
-      `SELECT id, title, banner_image, product_ids, created_at
-           FROM outfits
-           ORDER BY created_at DESC
-           LIMIT $1 OFFSET $2`,
-      [l, offset]
-    ),
-    sql('SELECT COUNT(*)::int FROM outfits')
-  ]);
+  return getCached(cacheKey, CACHE_TTL.OUTFITS, async () => {
+    const offset = (p - 1) * l;
 
-  const count = countResult[0]?.count || 0;
+    const [outfits, countResult] = await Promise.all([
+      sql(
+        `SELECT id, title, banner_image, product_ids, created_at
+         FROM outfits
+         ORDER BY created_at DESC
+         LIMIT $1 OFFSET $2`,
+        [l, offset]
+      ),
+      sql('SELECT COUNT(*)::int FROM outfits')
+    ]);
 
-  return {
-    outfits: outfits || [],
-    total: count,
-    page: p,
-    limit: l,
-    totalPages: Math.ceil(count / l)
-  };
+    const count = countResult[0]?.count || 0;
+
+    return {
+      outfits: outfits || [],
+      total: count,
+      page: p,
+      limit: l,
+      totalPages: Math.ceil(count / l)
+    };
+  });
 };
 
 export const getOutfitById = async (id) => {
-  const [data] = await sql('SELECT * FROM outfits WHERE id = $1 LIMIT 1', [id]);
-  if (!data) throw new NotFoundError('Outfit not found');
-  return data;
+  const cacheKey = `outfit:${id}`;
+
+  return getCached(cacheKey, CACHE_TTL.OUTFITS, async () => {
+    const [data] = await sql('SELECT * FROM outfits WHERE id = $1 LIMIT 1', [id]);
+    if (!data) throw new NotFoundError('Outfit not found');
+    return data;
+  });
 };
 
 export const createOutfit = async (outfitData) => {
@@ -52,6 +60,9 @@ export const createOutfit = async (outfitData) => {
   );
 
   if (!outfit) throw new Error('Failed to create outfit');
+
+  invalidateCacheByPrefix('outfits:').catch(() => {});
+
   return outfit;
 };
 
@@ -64,7 +75,7 @@ export const updateOutfit = async (id, updates) => {
 
   if (updates.banner_image && existingOutfit.banner_image !== updates.banner_image) {
     const { deleteProductImage } = await import('./upload.service.js');
-    await deleteProductImage(existingOutfit.banner_image).catch(e => logger.error(`Failed to delete old banner: ${e.message}`));
+    await deleteProductImage(existingOutfit.banner_image).catch(() => {});
   }
 
   const validUpdates = { ...validation.data };
@@ -78,6 +89,12 @@ export const updateOutfit = async (id, updates) => {
   );
 
   if (!outfit) throw new Error('Failed to update outfit');
+
+  Promise.all([
+    invalidateCacheByPrefix(`outfit:${id}`),
+    invalidateCacheByPrefix('outfits:')
+  ]).catch(() => {});
+
   return outfit;
 };
 
@@ -88,5 +105,11 @@ export const deleteOutfit = async (id) => {
     await deleteProductImage(outfit.banner_image);
   }
   await sql('DELETE FROM outfits WHERE id = $1', [id]);
+
+  Promise.all([
+    invalidateCacheByPrefix(`outfit:${id}`),
+    invalidateCacheByPrefix('outfits:')
+  ]).catch(() => {});
+
   return true;
 };

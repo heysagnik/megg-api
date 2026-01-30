@@ -1,4 +1,5 @@
 import { sql } from '../config/neon.js';
+import { getCached, CACHE_TTL } from '../utils/cache.js';
 
 export const trackProductClick = async (productId, userId = null) => {
   await sql(
@@ -9,19 +10,24 @@ export const trackProductClick = async (productId, userId = null) => {
 };
 
 export const getTrendingProducts = async (limit = 10) => {
-  const products = await sql(
-    `SELECT id, name, price, brand, images, category, subcategory, color, affiliate_link, clicks, popularity, updated_at
-     FROM products
-     ORDER BY clicks DESC
-     LIMIT $1`,
-    [limit]
-  );
+  const cacheKey = `trending:${limit}`;
 
-  if (!products) return [];
+  return getCached(cacheKey, CACHE_TTL.TRENDING_PRODUCTS, async () => {
+    const products = await sql(
+      `SELECT id, name, price, brand, images, category, subcategory, color, affiliate_link, clicks, popularity, updated_at
+       FROM products
+       WHERE is_active = true
+       ORDER BY clicks DESC
+       LIMIT $1`,
+      [limit]
+    );
 
-  return products.map(product => ({
-    ...product,
-    click_count: product.clicks || 0,
-    last_clicked: product.updated_at
-  }));
+    if (!products) return [];
+
+    return products.map(product => ({
+      ...product,
+      click_count: product.clicks || 0,
+      last_clicked: product.updated_at
+    }));
+  });
 };

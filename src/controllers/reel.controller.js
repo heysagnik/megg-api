@@ -71,12 +71,6 @@ export const createReel = async (req, res, next) => {
 
 export const updateReel = async (req, res, next) => {
   try {
-    console.log('Update reel request:', {
-      id: req.params.id,
-      body: req.body,
-      bodyKeys: Object.keys(req.body)
-    });
-
     const reel = await reelService.updateReel(req.params.id, req.body);
 
     res.json({
@@ -84,7 +78,6 @@ export const updateReel = async (req, res, next) => {
       data: reel
     });
   } catch (error) {
-    console.error('Update reel error:', error);
     next(error);
   }
 };

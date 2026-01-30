@@ -12,8 +12,69 @@
       "dest": "src/index.js"
     }
   ],
+  "functions": {
+    "src/index.js": {
+      "maxDuration": 30,
+      "memory": 1024
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/products(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "s-maxage=300, stale-while-revalidate=600" }
+      ]
+    },
+    {
+      "source": "/api/categories(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "s-maxage=3600, stale-while-revalidate=7200" }
+      ]
+    },
+    {
+      "source": "/api/subcategories(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "s-maxage=3600, stale-while-revalidate=7200" }
+      ]
+    },
+    {
+      "source": "/api/trending(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "s-maxage=300, stale-while-revalidate=600" }
+      ]
+    },
+    {
+      "source": "/api/banners(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "s-maxage=3600, stale-while-revalidate=7200" }
+      ]
+    },
+    {
+      "source": "/api/color-combos(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "s-maxage=1800, stale-while-revalidate=3600" }
+      ]
+    },
+    {
+      "source": "/api/reels(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "s-maxage=900, stale-while-revalidate=1800" }
+      ]
+    },
+    {
+      "source": "/api/offers(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "s-maxage=300, stale-while-revalidate=600" }
+      ]
+    },
+    {
+      "source": "/api/search(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "s-maxage=60, stale-while-revalidate=120" }
+      ]
+    }
+  ],
   "env": {
     "NODE_ENV": "production"
   }
 }
-

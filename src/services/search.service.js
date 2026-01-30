@@ -1,6 +1,6 @@
 import { sql } from '../config/neon.js';
 import { expandQuery, OCCASION_MAP, getRelatedColors, SUBCATEGORY_ALIASES } from '../config/searchMappings.js';
-import logger from '../utils/logger.js';
+import { getCached, CACHE_TTL } from '../utils/cache.js';
 
 const EMBEDDING_DIMENSION = 384;
 const MAX_PAGE = 1000;
@@ -14,7 +14,6 @@ function escapeForLike(str) {
 }
 
 const TYPO_CORRECTIONS = {
-  // Apparel
   'tshirt': 'tshirt', 'teeshirt': 'tshirt', 'tee': 'tshirt', 't-shirt': 'tshirt',
   'hoody': 'hoodie', 'hoddie': 'hoodie', 'hoodi': 'hoodie',
   'jackt': 'jacket', 'jcket': 'jacket',
@@ -23,26 +22,18 @@ const TYPO_CORRECTIONS = {
   'trousars': 'trousers', 'trouser': 'trousers',
   'shirt': 'shirt', 'shrt': 'shirt',
   'pant': 'pants', 'pnt': 'pants',
-
-  // Footwear
   'sneekers': 'sneakers', 'sneeker': 'sneaker', 'snikers': 'sneakers',
   'sheos': 'shoes', 'shooes': 'shoes',
   'sandle': 'sandals', 'sandal': 'sandals',
   'boot': 'boots', 'bots': 'boots',
-
-  // Brands
   'addidas': 'adidas', 'adiddas': 'adidas',
   'niike': 'nike', 'nkie': 'nike',
   'pumaa': 'puma', 'pumma': 'puma',
   'reebok': 'reebok', 'rebok': 'reebok',
-
-  // Activities/Occasions
   'runing': 'running', 'runnig': 'running',
   'causal': 'casual', 'formall': 'formal',
   'gyming': 'gym', 'gim': 'gym',
   'partywear': 'party', 'parti': 'party',
-
-  // Accessories
   'perfum': 'perfume', 'parfum': 'perfume',
   'accesories': 'accessories', 'acessories': 'accessories',
   'bag': 'bags', 'bg': 'bags',
@@ -69,7 +60,6 @@ export const unifiedSearch = async (params) => {
   const sort = params.sort;
   const page = Math.max(1, Math.min(MAX_PAGE, parseInt(params.page) || 1));
   const limit = Math.max(1, Math.min(MAX_LIMIT, parseInt(params.limit) || 20));
-  const offset = (page - 1) * limit;
 
   if (!rawQuery?.trim() && !category && !subcategory && !color && !brand) {
     return { products: [], banners: [], total: 0, page, limit, totalPages: 0, searchMode: 'empty', filters: {}, metadata: {} };
@@ -79,30 +69,31 @@ export const unifiedSearch = async (params) => {
     return { products: [], banners: [], total: 0, page, limit, totalPages: 0, searchMode: 'empty', filters: {}, metadata: {} };
   }
 
-  const query = correctTypos(rawQuery);
-  const parsed = query ? expandQuery(query) : {};
+  const cacheKey = `search:${rawQuery || ''}:${category || ''}:${subcategory || ''}:${color || ''}:${brand || ''}:${sort || ''}:${page}:${limit}`;
 
-  const filters = {
-    category: category || parsed.category,
-    subcategory: subcategory || parsed.subcategory,
-    color: color || parsed.color,
-    brand: brand || parsed.brand,
-    occasion: parsed.occasion,
-  };
+  return getCached(cacheKey, CACHE_TTL.SEARCH_RESULTS, async () => {
+    const offset = (page - 1) * limit;
+    const query = correctTypos(rawQuery);
+    const parsed = query ? expandQuery(query) : {};
 
-  try {
+    const filters = {
+      category: category || parsed.category,
+      subcategory: subcategory || parsed.subcategory,
+      color: color || parsed.color,
+      brand: brand || parsed.brand,
+      occasion: parsed.occasion,
+    };
+
     let results;
 
     if (parsed.confidence >= 2 || filters.category || filters.color || filters.brand) {
       results = await executeStrictSearch({ query, filters, limit, offset, sort, parsed });
 
-      // Fallback: If no results with all filters, try without subcategory
       if (results.length === 0 && filters.subcategory) {
         const relaxedFilters = { ...filters, subcategory: null };
         results = await executeStrictSearch({ query, filters: relaxedFilters, limit, offset, sort, parsed });
       }
 
-      // Fallback: If still no results, try with just category and brand (drop color)
       if (results.length === 0 && filters.color && (filters.category || filters.brand)) {
         const relaxedFilters = { ...filters, subcategory: null, color: null };
         results = await executeStrictSearch({ query, filters: relaxedFilters, limit, offset, sort, parsed });
@@ -143,10 +134,7 @@ export const unifiedSearch = async (params) => {
         parsed: { confidence: parsed.confidence, isCompound: parsed.isCompound },
       },
     };
-  } catch (e) {
-    logger.error('Search error', e);
-    throw new Error(`Search failed: ${e.message}`);
-  }
+  });
 };
 
 async function executeStrictSearch({ query, filters, limit, offset, sort, parsed }) {
@@ -162,9 +150,8 @@ async function executeStrictSearch({ query, filters, limit, offset, sort, parsed
   }
 
   if (filters.subcategory) {
-    // Get aliases for the subcategory to match database values like 'Half Sleeve' when searching for 'Half'
     const subcatAliases = SUBCATEGORY_ALIASES[filters.subcategory] || [filters.subcategory.toLowerCase()];
-    const subcatPatterns = [filters.subcategory, ...subcatAliases].slice(0, 3); // Limit to 3 patterns
+    const subcatPatterns = [filters.subcategory, ...subcatAliases].slice(0, 3);
 
     const startIdx = idx;
     const subcatOrConditions = [];
@@ -319,7 +306,7 @@ async function executeBrowseSearch({ filters, limit, offset, sort }) {
   return await sql(sqlQuery, params);
 }
 
-async function executeFallbackSearch({ query, filters, limit, offset, parsed }) {
+async function executeFallbackSearch({ query, filters, limit, offset }) {
   const params = [`%${query}%`, limit, offset];
 
   let conditions = 'is_active = true AND (name ILIKE $1 OR brand ILIKE $1 OR description ILIKE $1)';
@@ -347,7 +334,6 @@ async function executeFallbackSearch({ query, filters, limit, offset, parsed }) 
 
 export const hybridSearch = async (params) => {
   const { query, embedding, category, subcategory, color, brand, sort, page = 1, limit = 20 } = params;
-  const offset = (page - 1) * limit;
 
   if (!query || query.length < 2) {
     return { products: [], total: 0, page, limit, totalPages: 0, searchMode: 'empty' };
@@ -359,50 +345,53 @@ export const hybridSearch = async (params) => {
     return unifiedSearch(params);
   }
 
-  const vectorStr = `[${embedding.join(',')}]`;
-  const correctedQuery = correctTypos(query);
-  const parsed = expandQuery(correctedQuery);
+  const cacheKey = `hybrid:${query}:${category || ''}:${color || ''}:${brand || ''}:${sort || ''}:${page}:${limit}`;
 
-  const filters = {
-    category: category || parsed.category,
-    color: color || parsed.color,
-    brand: brand || parsed.brand,
-  };
+  return getCached(cacheKey, CACHE_TTL.SEARCH_RESULTS, async () => {
+    const offset = (page - 1) * limit;
+    const vectorStr = `[${embedding.join(',')}]`;
+    const correctedQuery = correctTypos(query);
+    const parsed = expandQuery(correctedQuery);
 
-  const sqlParams = [vectorStr, correctedQuery];
-  const vectorConditions = ['embedding IS NOT NULL', 'is_active = true'];
-  const textConditions = ['is_active = true'];
-  let paramIdx = 3;
+    const filters = {
+      category: category || parsed.category,
+      color: color || parsed.color,
+      brand: brand || parsed.brand,
+    };
 
-  if (filters.category) {
-    vectorConditions.push(`category::text ILIKE $${paramIdx}`);
-    textConditions.push(`category::text ILIKE $${paramIdx}`);
-    sqlParams.push(`%${filters.category}%`);
-    paramIdx++;
-  }
-  if (filters.color) {
-    vectorConditions.push(`color ILIKE $${paramIdx}`);
-    textConditions.push(`color ILIKE $${paramIdx}`);
-    sqlParams.push(`%${filters.color}%`);
-    paramIdx++;
-  }
-  if (filters.brand) {
-    vectorConditions.push(`brand ILIKE $${paramIdx}`);
-    textConditions.push(`brand ILIKE $${paramIdx}`);
-    sqlParams.push(`%${filters.brand}%`);
-    paramIdx++;
-  }
+    const sqlParams = [vectorStr, correctedQuery];
+    const vectorConditions = ['embedding IS NOT NULL', 'is_active = true'];
+    const textConditions = ['is_active = true'];
+    let paramIdx = 3;
 
-  const limitIdx = paramIdx;
-  const offsetIdx = paramIdx + 1;
-  sqlParams.push(limit, offset);
+    if (filters.category) {
+      vectorConditions.push(`category::text ILIKE $${paramIdx}`);
+      textConditions.push(`category::text ILIKE $${paramIdx}`);
+      sqlParams.push(`%${filters.category}%`);
+      paramIdx++;
+    }
+    if (filters.color) {
+      vectorConditions.push(`color ILIKE $${paramIdx}`);
+      textConditions.push(`color ILIKE $${paramIdx}`);
+      sqlParams.push(`%${filters.color}%`);
+      paramIdx++;
+    }
+    if (filters.brand) {
+      vectorConditions.push(`brand ILIKE $${paramIdx}`);
+      textConditions.push(`brand ILIKE $${paramIdx}`);
+      sqlParams.push(`%${filters.brand}%`);
+      paramIdx++;
+    }
 
-  const orderBy = sort === 'price_asc' ? 'p.price ASC'
-    : sort === 'price_desc' ? 'p.price DESC'
-      : sort === 'newest' ? 'p.created_at DESC'
-        : 'combined_score DESC';
+    const limitIdx = paramIdx;
+    const offsetIdx = paramIdx + 1;
+    sqlParams.push(limit, offset);
 
-  try {
+    const orderBy = sort === 'price_asc' ? 'p.price ASC'
+      : sort === 'price_desc' ? 'p.price DESC'
+        : sort === 'newest' ? 'p.created_at DESC'
+          : 'combined_score DESC';
+
     const sqlQuery = `
       WITH vector_scores AS (
         SELECT id, 1 - (embedding <=> $1::vector) AS vector_score
@@ -445,10 +434,7 @@ export const hybridSearch = async (params) => {
       filters: { appliedCategory: filters.category, appliedColor: filters.color, appliedBrand: filters.brand },
       metadata: { query: correctedQuery, hasVectorSearch: true },
     };
-  } catch (error) {
-    logger.error('Hybrid search error', error);
-    return unifiedSearch(params);
-  }
+  });
 };
 
 export const smartSearch = unifiedSearch;

@@ -6,28 +6,38 @@ import sharp from 'sharp';
 import { parse } from 'csv-parse/sync';
 import { createProduct } from '../src/services/product.service.js';
 import { uploadToR2 } from '../src/config/r2.js';
+import Groq from 'groq-sdk';
 
-// Configuration
-const CONFIG = {
-    'TSHIRT (Polo).csv': {
-        category: 'Tshirt',
-        subcategory: 'Polo',
-        imageDir: './assets/polo'
-    },
-    'TSHIRT (full sleve).csv': {
-        category: 'Tshirt',
-        subcategory: 'Full-Sleeve',
-        imageDir: './assets/full sleeve'
-    },
-    'TSHIRT (oversized).csv': {
-        category: 'Tshirt',
-        subcategory: 'Oversized',
-        imageDir: './assets/oversized'
-    }
+const DRY_RUN = process.argv.includes('--dry-run');
+
+// Initialize Groq client
+const groq = new Groq({
+    apiKey: process.env.GROQ_API_KEY
+});
+
+// Helper: Title Case
+const toTitleCase = (str) => {
+    return str.toLowerCase().replace(/(?:^|\s)\w/g, match => match.toUpperCase());
 };
 
 
-const DRY_RUN = process.argv.includes('--dry-run');
+function parseConfigFromFilename(filename) {
+    const name = filename.replace('.csv', '');
+    const match = name.match(/^([^(]+)\s*\(([^)]+)\)$/);
+
+    if (!match) {
+        throw new Error(`Invalid filename format: "${filename}". Expected format: "CATEGORY (Subcategory).csv"`);
+    }
+
+    const rawCategory = match[1].trim();     // "TSHIRT"
+    const rawSubcategory = match[2].trim();  // "Polo"
+
+    return {
+        category: toTitleCase(rawCategory), // "Tshirt"
+        subcategory: rawSubcategory,        // "Polo"
+        imageDir: `./assets/${rawSubcategory.toLowerCase()}` // "./assets/polo"
+    };
+}
 
 function linkToFolder(link) {
     if (!link) return null;
@@ -43,7 +53,53 @@ function parsePrice(priceStr) {
 // Parse fabric to array
 function parseFabric(fabricStr) {
     if (!fabricStr) return [];
+    if (Array.isArray(fabricStr)) return fabricStr;
     return fabricStr.split(',').map(f => f.trim()).filter(Boolean);
+}
+
+// Format description using Groq LLM
+async function formatDescription(desc) {
+    if (!desc) return '';
+
+    // Clean up basic spacing first
+    const rawDesc = desc.trim().replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ');
+
+    // Skip if very short
+    if (rawDesc.length < 10) return rawDesc;
+
+    if (DRY_RUN) console.log(`      🤖 AI Formatting description...`);
+
+    try {
+        const completion = await groq.chat.completions.create({
+            messages: [
+                {
+                    role: "system",
+                    content: `You are a fashion catalog assistant. Format the following description into a clean, concise bulleted list.
+Rules:
+- Start each point with "• "
+- Bold the attribute name if present (e.g., "• Fabric: Cotton")
+- Remove marketing fluff.
+- Output ONLY the list.
+- Keep it under 6 points.`
+                },
+                {
+                    role: "user",
+                    content: rawDesc
+                }
+            ],
+            // Use llama-3.1-8b-instant as requested (low cost)
+            model: "llama-3.1-8b-instant",
+            temperature: 0.1,
+            max_tokens: 154,
+        });
+
+        const formatted = completion.choices[0]?.message?.content?.trim();
+        return formatted || rawDesc;
+    } catch (error) {
+        // Handle missing key or other errors gracefully
+        if (DRY_RUN) console.warn(`      ⚠️ Groq API Error: ${error.message} - Using raw description.`);
+        return rawDesc;
+    }
 }
 
 // Process and upload single high-quality image
@@ -99,7 +155,9 @@ async function findImagesInFolder(folderPath) {
     }
 }
 
+// Use the createProduct service (handles semantic_tags, embeddings, search_vector)
 async function insertProduct(product) {
+    // createProduct expects these fields and auto-generates semantic_tags + embedding
     const productData = {
         name: product.name,
         description: product.description,
@@ -118,13 +176,28 @@ async function insertProduct(product) {
 }
 
 // Process a single CSV file
-async function processCSV(csvFile, config) {
+async function processCSV(csvFile) {
+    // Generate config from filename
+    let config;
+    try {
+        config = parseConfigFromFilename(csvFile);
+    } catch (e) {
+        console.error(`❌ Error parsing filename "${csvFile}": ${e.message}`);
+        return { success: 0, failed: 1, skipped: 0 };
+    }
+
     console.log(`\n📂 Processing: ${csvFile}`);
     console.log(`   Category: ${config.category} | Subcategory: ${config.subcategory}`);
     console.log(`   Images: ${config.imageDir}`);
 
     const csvPath = resolve('./data', csvFile);
-    const content = await readFile(csvPath, 'utf-8');
+    let content;
+    try {
+        content = await readFile(csvPath, 'utf-8');
+    } catch (e) {
+        console.error(`   ❌ Could not read file: ${csvPath}`);
+        return { success: 0, failed: 1, skipped: 0 };
+    }
 
     // Parse CSV
     const records = parse(content, {
@@ -189,10 +262,12 @@ async function processCSV(csvFile, config) {
             continue;
         }
 
-        // Prepare product data
+        // Prepare product data (Format description asynchronously)
+        const formattedDesc = await formatDescription(record.description || '');
+
         const product = {
             name,
-            description: record.description?.trim() || '',
+            description: formattedDesc,
             price: parsePrice(record.price),
             brand,
             images: JSON.stringify(uploadedImages),
@@ -205,6 +280,7 @@ async function processCSV(csvFile, config) {
 
         if (DRY_RUN) {
             console.log(`      ✅ [DRY-RUN] Would insert: ${name.substring(0, 40)}...`);
+            console.log(`         Description: ${product.description.replace(/\n/g, '\n                      ')}`);
             success++;
         } else {
             try {
@@ -223,25 +299,22 @@ async function processCSV(csvFile, config) {
 
 // Main
 async function main() {
-    console.log('🚀 Bulk Import with Images');
+    console.log('🚀 Bulk Import with Images (Dynamic + Groq AI)');
     console.log(`   Mode: ${DRY_RUN ? 'DRY RUN (no changes)' : 'LIVE'}`);
     console.log('');
 
     const args = process.argv.slice(2).filter(a => !a.startsWith('--'));
-    const csvFiles = args.length > 0
-        ? args.filter(f => CONFIG[f])
-        : Object.keys(CONFIG);
 
-    if (csvFiles.length === 0) {
+    if (args.length === 0) {
         console.log('Usage: node scripts/import-with-images.js [csv-file] [--dry-run]');
-        console.log('Available files:', Object.keys(CONFIG).join(', '));
+        console.log('Example: node scripts/import-with-images.js "TSHIRT (Polo).csv"');
         process.exit(1);
     }
 
     const totals = { success: 0, failed: 0, skipped: 0 };
 
-    for (const csvFile of csvFiles) {
-        const result = await processCSV(csvFile, CONFIG[csvFile]);
+    for (const csvFile of args) {
+        const result = await processCSV(csvFile);
         totals.success += result.success;
         totals.failed += result.failed;
         totals.skipped += result.skipped;

@@ -3,6 +3,7 @@ import { NotFoundError, ValidationError } from '../utils/errors.js';
 import logger from '../utils/logger.js';
 import { productDataSchemaRaw, listProductsParamsRaw } from '../validators/product.validators.js';
 import { OCCASION_MAP } from '../config/searchMappings.js';
+import { getCached, invalidateCacheByPrefix, CACHE_TTL } from '../utils/cache.js';
 
 const FABRIC_PROPERTIES = {
   breathable: ['cotton', 'linen', 'mesh', 'bamboo', 'rayon'],
@@ -12,7 +13,6 @@ const FABRIC_PROPERTIES = {
   luxurious: ['silk', 'cashmere', 'velvet', 'satin'],
   waterproof: ['polyester', 'nylon', 'gore-tex'],
 };
-
 
 const generateSemanticTags = (product) => {
   const tags = new Set();
@@ -36,7 +36,6 @@ const generateSemanticTags = (product) => {
     }
   });
 
-  // Season tags based on subcategory name/category
   const winterItems = ['jacket', 'puffer', 'hoodie', 'sweater', 'thermal', 'fleece', 'coat'];
   const summerItems = ['shorts', 'linen', 'half-sleeve', 'tank', 't-shirt', 'polo'];
   const subLower = subcategory?.toLowerCase() || '';
@@ -69,7 +68,6 @@ const generateEmbedding = async (product) => {
   const CF_API_TOKEN = process.env.CF_API_TOKEN;
 
   if (!CF_ACCOUNT_ID || !CF_API_TOKEN) {
-    logger.warn('Cloudflare credentials not configured, skipping embedding generation');
     return null;
   }
 
@@ -90,7 +88,6 @@ const generateEmbedding = async (product) => {
     );
 
     if (!response.ok) {
-      logger.warn(`Embedding API returned ${response.status}, skipping embedding`);
       return null;
     }
 
@@ -100,7 +97,6 @@ const generateEmbedding = async (product) => {
     }
     return null;
   } catch (error) {
-    logger.warn('Failed to generate embedding:', error.message);
     return null;
   }
 };
@@ -145,51 +141,54 @@ export const listProducts = async (params) => {
   }
 
   const { category, subcategory, color, search, sort, page, limit } = validation.data;
-  const offset = (page - 1) * limit;
+  const cacheKey = `products:list:${category || 'all'}:${subcategory || 'all'}:${color || 'all'}:${search || ''}:${sort}:${page}:${limit}`;
 
-  let orderBy = 'ORDER BY created_at DESC';
-  switch (sort) {
-    case 'popularity': orderBy = 'ORDER BY popularity DESC'; break;
-    case 'price_asc': orderBy = 'ORDER BY price ASC'; break;
-    case 'price_desc': orderBy = 'ORDER BY price DESC'; break;
-    case 'oldest': orderBy = 'ORDER BY created_at ASC'; break;
-    case 'newest': orderBy = 'ORDER BY created_at DESC'; break;
-  }
+  return getCached(cacheKey, CACHE_TTL.PRODUCT_LIST, async () => {
+    const offset = (page - 1) * limit;
 
-  const conditions = [{ clause: 'is_active = TRUE' }];
-  if (category) conditions.push({ clause: 'category = ?', value: category });
-  if (subcategory) conditions.push({ clause: 'subcategory = ?', value: subcategory });
-  if (color) conditions.push({ clause: 'color = ?', value: color });
-  if (search) conditions.push({ clause: "search_vector @@ plainto_tsquery('english', ?)", value: search });
+    let orderBy = 'ORDER BY created_at DESC';
+    switch (sort) {
+      case 'popularity': orderBy = 'ORDER BY popularity DESC'; break;
+      case 'price_asc': orderBy = 'ORDER BY price ASC'; break;
+      case 'price_desc': orderBy = 'ORDER BY price DESC'; break;
+      case 'oldest': orderBy = 'ORDER BY created_at ASC'; break;
+      case 'newest': orderBy = 'ORDER BY created_at DESC'; break;
+    }
 
-  const listQ = buildQuery(
-    'SELECT id, name, description, price, brand, images, category, subcategory, color, fabric, affiliate_link FROM products',
-    conditions,
-    orderBy,
-    limit,
-    offset
-  );
+    const conditions = [{ clause: 'is_active = TRUE' }];
+    if (category) conditions.push({ clause: 'category = ?', value: category });
+    if (subcategory) conditions.push({ clause: 'subcategory = ?', value: subcategory });
+    if (color) conditions.push({ clause: 'color = ?', value: color });
+    if (search) conditions.push({ clause: "search_vector @@ plainto_tsquery('english', ?)", value: search });
 
-  const countQ = buildQuery(
-    'SELECT COUNT(*)::int FROM products',
-    conditions
-    // no limit/offset/order
-  );
+    const listQ = buildQuery(
+      'SELECT id, name, description, price, brand, images, category, subcategory, color, fabric, affiliate_link FROM products',
+      conditions,
+      orderBy,
+      limit,
+      offset
+    );
 
-  const [products, countResult] = await Promise.all([
-    sql(listQ.query, listQ.values),
-    sql(countQ.query, countQ.values)
-  ]);
+    const countQ = buildQuery(
+      'SELECT COUNT(*)::int FROM products',
+      conditions
+    );
 
-  const count = countResult[0]?.count || 0;
+    const [products, countResult] = await Promise.all([
+      sql(listQ.query, listQ.values),
+      sql(countQ.query, countQ.values)
+    ]);
 
-  return {
-    products,
-    total: count,
-    page,
-    limit,
-    totalPages: Math.ceil(count / limit)
-  };
+    const count = countResult[0]?.count || 0;
+
+    return {
+      products,
+      total: count,
+      page,
+      limit,
+      totalPages: Math.ceil(count / limit)
+    };
+  });
 };
 
 export const browseByCategory = async (params) => {
@@ -199,98 +198,109 @@ export const browseByCategory = async (params) => {
   }
 
   const { category, subcategory, color, sort, page, limit } = validation.data;
-  const offset = (page - 1) * limit;
 
   if (!category) throw new ValidationError('Category is required');
 
-  let orderBy = 'ORDER BY popularity DESC';
-  switch (sort) {
-    case 'price_asc': orderBy = 'ORDER BY price ASC'; break;
-    case 'price_desc': orderBy = 'ORDER BY price DESC'; break;
-    case 'oldest': orderBy = 'ORDER BY created_at ASC'; break;
-    case 'newest': orderBy = 'ORDER BY created_at DESC'; break;
-  }
+  const cacheKey = `products:browse:${category}:${subcategory || 'all'}:${color || 'all'}:${sort}:${page}:${limit}`;
 
-  const conditions = [{ clause: 'category = ?', value: category }];
-  if (subcategory) conditions.push({ clause: 'subcategory = ?', value: subcategory });
-  if (color) conditions.push({ clause: 'color = ?', value: color });
+  return getCached(cacheKey, CACHE_TTL.PRODUCT_LIST, async () => {
+    const offset = (page - 1) * limit;
 
-  const listQ = buildQuery(
-    'SELECT id, name, description, price, brand, images, category, subcategory, color, fabric, affiliate_link FROM products',
-    conditions,
-    orderBy,
-    limit,
-    offset
-  );
+    let orderBy = 'ORDER BY popularity DESC';
+    switch (sort) {
+      case 'price_asc': orderBy = 'ORDER BY price ASC'; break;
+      case 'price_desc': orderBy = 'ORDER BY price DESC'; break;
+      case 'oldest': orderBy = 'ORDER BY created_at ASC'; break;
+      case 'newest': orderBy = 'ORDER BY created_at DESC'; break;
+    }
 
-  const countQ = buildQuery('SELECT COUNT(*)::int FROM products', conditions);
+    const conditions = [{ clause: 'category = ?', value: category }];
+    if (subcategory) conditions.push({ clause: 'subcategory = ?', value: subcategory });
+    if (color) conditions.push({ clause: 'color = ?', value: color });
 
-  const [products, countResult, banners] = await Promise.all([
-    sql(listQ.query, listQ.values),
-    sql(countQ.query, countQ.values),
-    sql('SELECT id, banner_image, link, display_order FROM category_banners WHERE category = $1 ORDER BY display_order ASC', [category])
-  ]);
+    const listQ = buildQuery(
+      'SELECT id, name, description, price, brand, images, category, subcategory, color, fabric, affiliate_link FROM products',
+      conditions,
+      orderBy,
+      limit,
+      offset
+    );
 
-  const count = countResult[0]?.count || 0;
+    const countQ = buildQuery('SELECT COUNT(*)::int FROM products', conditions);
 
-  return {
-    category,
-    banners: banners || [],
-    products: products || [],
-    total: count,
-    page,
-    limit,
-    totalPages: Math.ceil(count / limit),
-    appliedFilters: { subcategory, color, sort }
-  };
+    const [products, countResult, banners] = await Promise.all([
+      sql(listQ.query, listQ.values),
+      sql(countQ.query, countQ.values),
+      sql('SELECT id, banner_image, link, display_order FROM category_banners WHERE category = $1 ORDER BY display_order ASC', [category])
+    ]);
+
+    const count = countResult[0]?.count || 0;
+
+    return {
+      category,
+      banners: banners || [],
+      products: products || [],
+      total: count,
+      page,
+      limit,
+      totalPages: Math.ceil(count / limit),
+      appliedFilters: { subcategory, color, sort }
+    };
+  });
 };
 
 export const getProductById = async (id) => {
-  const [product] = await sql(
-    `SELECT id, name, description, price, brand, images, category, subcategory, color, fabric, affiliate_link, is_active, clicks, popularity, created_at, updated_at
-     FROM products
-     WHERE id = $1
-     LIMIT 1`,
-    [id]
-  );
+  const cacheKey = `product:${id}`;
 
-  if (!product) {
+  const result = await getCached(cacheKey, CACHE_TTL.PRODUCT_DETAIL, async () => {
+    const [product] = await sql(
+      `SELECT id, name, description, price, brand, images, category, subcategory, color, fabric, affiliate_link, is_active, clicks, popularity, created_at, updated_at
+       FROM products
+       WHERE id = $1
+       LIMIT 1`,
+      [id]
+    );
+
+    if (!product) {
+      return null;
+    }
+
+    const [variants, recommended] = await Promise.all([
+      sql(
+        `SELECT id, color, images
+         FROM products
+         WHERE brand = $1
+         AND name ILIKE $2
+         AND id != $3
+         AND is_active = true
+         LIMIT 10`,
+        [product.brand, product.name, id]
+      ),
+      sql(
+        `SELECT id, name, price, brand, images, color, category, subcategory, affiliate_link
+         FROM products
+         WHERE id != $1
+         AND is_active = true
+         AND (
+           ($2::text IS NOT NULL AND subcategory::text = $2) OR
+           ($2::text IS NULL AND category::text = $3)
+         )
+         ORDER BY popularity DESC
+         LIMIT 8`,
+        [id, product.subcategory, product.category]
+      )
+    ]);
+
+    return { product, variants, recommended };
+  });
+
+  if (!result || !result.product) {
     throw new NotFoundError('Product not found');
   }
 
-  // Fire and forget update
-  sql('UPDATE products SET popularity = popularity + 1 WHERE id = $1', [id]).catch(err =>
-    logger.error(`Failed to update popularity: ${err.message}`)
-  );
+  sql('UPDATE products SET popularity = popularity + 1 WHERE id = $1', [id]).catch(() => {});
 
-  // Get color variants (same product, different colors)
-  const variants = await sql(
-    `SELECT id, color, images
-     FROM products
-     WHERE brand = $1
-     AND name ILIKE $2
-     AND id != $3
-     AND is_active = true
-     LIMIT 10`,
-    [product.brand, product.name, id]
-  );
-
-  // Get recommended products from same subcategory
-  const recommended = await sql(
-    `SELECT id, name, price, brand, images, color, category, subcategory, affiliate_link
-     FROM products
-     WHERE id != $1
-     AND is_active = true
-     AND (
-       ($2::text IS NOT NULL AND subcategory::text = $2) OR
-       ($2::text IS NULL AND category::text = $3)
-     )
-     ORDER BY popularity DESC
-     LIMIT 8`,
-    [id, product.subcategory, product.category]
-  );
-
-  return { product, variants, recommended };
+  return result;
 };
 
 export const incrementProductClicks = async (id) => {
@@ -300,29 +310,37 @@ export const incrementProductClicks = async (id) => {
 export const getRecommendedProducts = async (fabricTypes, excludeId) => {
   if (!fabricTypes || fabricTypes.length === 0) return [];
 
-  return await sql(
-    `SELECT id, name, price, brand, images, color, category, subcategory
-     FROM products
-     WHERE id != $1
-     AND color = ANY($2) 
-     LIMIT 6`,
-    [excludeId, fabricTypes]
-  );
+  const cacheKey = `recs:${excludeId}:${fabricTypes.join(',')}`;
+
+  return getCached(cacheKey, CACHE_TTL.RECOMMENDATIONS, async () => {
+    return await sql(
+      `SELECT id, name, price, brand, images, color, category, subcategory
+       FROM products
+       WHERE id != $1
+       AND color = ANY($2) 
+       LIMIT 6`,
+      [excludeId, fabricTypes]
+    );
+  });
 };
 
 export const getRelatedProducts = async (id) => {
-  const [product] = await sql('SELECT category FROM products WHERE id = $1', [id]);
-  if (!product) throw new NotFoundError('Product not found');
+  const cacheKey = `related:${id}`;
 
-  return await sql(
-    `SELECT id, name, price, brand, images, color, category, subcategory
-     FROM products
-     WHERE category = $1
-     AND id != $2
-     ORDER BY popularity DESC
-     LIMIT 8`,
-    [product.category, id]
-  );
+  return getCached(cacheKey, CACHE_TTL.RECOMMENDATIONS, async () => {
+    const [product] = await sql('SELECT category FROM products WHERE id = $1', [id]);
+    if (!product) throw new NotFoundError('Product not found');
+
+    return await sql(
+      `SELECT id, name, price, brand, images, color, category, subcategory
+       FROM products
+       WHERE category = $1
+       AND id != $2
+       ORDER BY popularity DESC
+       LIMIT 8`,
+      [product.category, id]
+    );
+  });
 };
 
 export const createProduct = async (productData) => {
@@ -344,7 +362,6 @@ export const createProduct = async (productData) => {
     }
   }
 
-  // Auto-generate semantic_tags
   validData.semantic_tags = generateSemanticTags(validData);
 
   try {
@@ -358,17 +375,17 @@ export const createProduct = async (productData) => {
       RETURNING *
     `, values);
 
-    // Fire-and-forget: Generate embedding asynchronously
+    invalidateCacheByPrefix('products:').catch(() => {});
+
     generateEmbedding(newProduct).then(embedding => {
       if (embedding) {
         sql('UPDATE products SET embedding = $1::vector WHERE id = $2', [embedding, newProduct.id])
-          .catch(err => logger.error('Failed to save embedding:', err.message));
+          .catch(() => {});
       }
-    }).catch(err => logger.warn('Embedding generation error:', err.message));
+    }).catch(() => {});
 
     return newProduct;
   } catch (error) {
-    logger.error('Product creation error:', error);
     if (error.code === '23505') throw new Error('A product with this identifier already exists.');
     throw new Error(`Failed to create product: ${error.message}`);
   }
@@ -395,7 +412,7 @@ export const updateProduct = async (id, updates, newFiles = []) => {
           if (validUpdates.fabric.startsWith('[')) {
             validUpdates.fabric = JSON.parse(validUpdates.fabric);
           } else {
-            validUpdates.fabric = [validUpdates.fabric]; // Convert single string to array
+            validUpdates.fabric = [validUpdates.fabric];
           }
         } catch (e) {
           validUpdates.fabric = [validUpdates.fabric];
@@ -442,28 +459,25 @@ export const updateProduct = async (id, updates, newFiles = []) => {
   }
 
   try {
-    // Check if we need to regenerate semantic_tags and embedding
     const shouldRegenerate = ['name', 'description', 'category', 'subcategory', 'color', 'brand', 'price']
       .some(field => validUpdates[field] !== undefined);
 
     if (shouldRegenerate) {
-      // Get full product data for tag generation
       const [fullProduct] = await sql('SELECT * FROM products WHERE id = $1', [id]);
       const mergedProduct = { ...fullProduct, ...validUpdates };
       validUpdates.semantic_tags = generateSemanticTags(mergedProduct);
 
-      // Fire-and-forget: Regenerate embedding asynchronously
       generateEmbedding(mergedProduct).then(embedding => {
         if (embedding) {
           sql('UPDATE products SET embedding = $1::vector WHERE id = $2', [embedding, id])
-            .catch(err => logger.error('Failed to update embedding:', err.message));
+            .catch(() => {});
         }
-      }).catch(err => logger.warn('Embedding regeneration error:', err.message));
+      }).catch(() => {});
     }
 
     const dataToUpdate = { ...validUpdates, updated_at: new Date().toISOString() };
     const keys = Object.keys(dataToUpdate);
-    const setFragments = keys.map((k, i) => `"${k}" = $${i + 2}`); // $1 is id
+    const setFragments = keys.map((k, i) => `"${k}" = $${i + 2}`);
     const values = [id, ...keys.map(k => dataToUpdate[k])];
 
     const [updatedProduct] = await sql(`
@@ -472,6 +486,12 @@ export const updateProduct = async (id, updates, newFiles = []) => {
       WHERE id = $1 
       RETURNING *
     `, values);
+
+    Promise.all([
+      invalidateCacheByPrefix(`product:${id}`),
+      invalidateCacheByPrefix('products:')
+    ]).catch(() => {});
+
     return updatedProduct;
   } catch (error) {
     throw new Error(`Failed to update product: ${error.message}`);
@@ -490,42 +510,57 @@ export const deleteProduct = async (id) => {
   const [deleted] = await sql('DELETE FROM products WHERE id = $1 RETURNING id', [id]);
   if (!deleted) throw new Error('Failed to delete product');
 
+  Promise.all([
+    invalidateCacheByPrefix(`product:${id}`),
+    invalidateCacheByPrefix('products:')
+  ]).catch(() => {});
+
   return true;
 };
 
 export const getColorVariants = async (id) => {
-  const [product] = await sql('SELECT name, brand, subcategory, category FROM products WHERE id = $1', [id]);
-  if (!product) throw new NotFoundError('Product not found');
+  const cacheKey = `variants:${id}`;
 
-  return await sql(
-    `SELECT id, name, price, brand, images, color, category, subcategory
-    FROM products
-    WHERE brand = $1
-    AND name ILIKE $2
-    AND id != $3
-    AND (
-      ($4::text IS NOT NULL AND subcategory::text = $4) OR
-      ($4::text IS NULL AND category::text = $5)
-    )
-    LIMIT 10`,
-    [product.brand, product.name, id, product.subcategory, product.category]
-  );
+  return getCached(cacheKey, CACHE_TTL.VARIANTS, async () => {
+    const [product] = await sql('SELECT name, brand, subcategory, category FROM products WHERE id = $1', [id]);
+    if (!product) throw new NotFoundError('Product not found');
+
+    return await sql(
+      `SELECT id, name, price, brand, images, color, category, subcategory
+      FROM products
+      WHERE brand = $1
+      AND name ILIKE $2
+      AND id != $3
+      AND is_active = true
+      AND (
+        ($4::text IS NOT NULL AND subcategory::text = $4) OR
+        ($4::text IS NULL AND category::text = $5)
+      )
+      LIMIT 10`,
+      [product.brand, product.name, id, product.subcategory, product.category]
+    );
+  });
 };
 
 export const getRecommendedFromSubcategory = async (id) => {
-  const [product] = await sql('SELECT subcategory, category FROM products WHERE id = $1', [id]);
-  if (!product) throw new NotFoundError('Product not found');
+  const cacheKey = `subrecs:${id}`;
 
-  return await sql(
-    `SELECT id, name, price, brand, images, color, category, subcategory, affiliate_link, popularity
-    FROM products
-    WHERE id != $1
-    AND (
-       ($2::text IS NOT NULL AND subcategory::text = $2) OR
-       ($2::text IS NULL AND category::text = $3)
-    )
-    ORDER BY popularity DESC
-    LIMIT 12`,
-    [id, product.subcategory, product.category]
-  );
+  return getCached(cacheKey, CACHE_TTL.RECOMMENDATIONS, async () => {
+    const [product] = await sql('SELECT subcategory, category FROM products WHERE id = $1', [id]);
+    if (!product) throw new NotFoundError('Product not found');
+
+    return await sql(
+      `SELECT id, name, price, brand, images, color, category, subcategory, affiliate_link, popularity
+      FROM products
+      WHERE id != $1
+      AND is_active = true
+      AND (
+         ($2::text IS NOT NULL AND subcategory::text = $2) OR
+         ($2::text IS NULL AND category::text = $3)
+      )
+      ORDER BY popularity DESC
+      LIMIT 12`,
+      [id, product.subcategory, product.category]
+    );
+  });
 };

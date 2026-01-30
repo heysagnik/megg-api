@@ -11,7 +11,6 @@ export const apiKeyAuth = (req, res, next) => {
     const validKey = process.env.ADMIN_API_KEY;
 
     if (!validKey) {
-        console.error('ADMIN_API_KEY environment variable is not set');
         return next(new ForbiddenError('Server configuration error'));
     }
 
@@ -23,7 +22,6 @@ export const apiKeyAuth = (req, res, next) => {
         return next(new ForbiddenError('Invalid API key'));
     }
 
-    // API key is valid, add admin flag to request
     req.isAdmin = true;
     next();
 };

@@ -2,56 +2,69 @@ import { sql } from '../config/neon.js';
 import { NotFoundError, ValidationError } from '../utils/errors.js';
 import { deleteReelVideo, deleteProductImage } from './upload.service.js';
 import { reelSchema } from '../validators/reel.validators.js';
+import { getCached, invalidateCacheByPrefix, CACHE_TTL } from '../utils/cache.js';
 
 export const listAllReels = async ({ page = 1, limit = 20 } = {}) => {
   const p = Number(page) || 1;
   const l = Number(limit) || 20;
-  const offset = (p - 1) * l;
+  const cacheKey = `reels:all:${p}:${l}`;
 
-  const [reels, countResult] = await Promise.all([
-    sql(`SELECT id, category, video_url, thumbnail_url, product_ids, views, likes, created_at
-         FROM reels ORDER BY created_at DESC LIMIT $1 OFFSET $2`, [l, offset]),
-    sql('SELECT COUNT(*)::int FROM reels')
-  ]);
+  return getCached(cacheKey, CACHE_TTL.REELS, async () => {
+    const offset = (p - 1) * l;
 
-  return {
-    reels: reels || [],
-    total: countResult[0]?.count || 0,
-    page: p,
-    limit: l,
-    totalPages: Math.ceil((countResult[0]?.count || 0) / l)
-  };
+    const [reels, countResult] = await Promise.all([
+      sql(`SELECT id, category, video_url, thumbnail_url, product_ids, views, likes, created_at
+           FROM reels ORDER BY created_at DESC LIMIT $1 OFFSET $2`, [l, offset]),
+      sql('SELECT COUNT(*)::int FROM reels')
+    ]);
+
+    return {
+      reels: reels || [],
+      total: countResult[0]?.count || 0,
+      page: p,
+      limit: l,
+      totalPages: Math.ceil((countResult[0]?.count || 0) / l)
+    };
+  });
 };
 
 export const listReelsByCategory = async (category, { page = 1, limit = 20 } = {}) => {
   const p = Number(page) || 1;
   const l = Number(limit) || 20;
-  const offset = (p - 1) * l;
+  const cacheKey = `reels:${category}:${p}:${l}`;
 
-  const [reels, countResult] = await Promise.all([
-    sql(`SELECT id, category, video_url, thumbnail_url, product_ids, views, likes, created_at
-         FROM reels WHERE category = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`, [category, l, offset]),
-    sql('SELECT COUNT(*)::int FROM reels WHERE category = $1', [category])
-  ]);
+  return getCached(cacheKey, CACHE_TTL.REELS, async () => {
+    const offset = (p - 1) * l;
 
-  return {
-    reels: reels || [],
-    total: countResult[0]?.count || 0,
-    page: p,
-    limit: l,
-    totalPages: Math.ceil((countResult[0]?.count || 0) / l)
-  };
+    const [reels, countResult] = await Promise.all([
+      sql(`SELECT id, category, video_url, thumbnail_url, product_ids, views, likes, created_at
+           FROM reels WHERE category = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`, [category, l, offset]),
+      sql('SELECT COUNT(*)::int FROM reels WHERE category = $1', [category])
+    ]);
+
+    return {
+      reels: reels || [],
+      total: countResult[0]?.count || 0,
+      page: p,
+      limit: l,
+      totalPages: Math.ceil((countResult[0]?.count || 0) / l)
+    };
+  });
 };
 
 export const getReelWithProducts = async (id) => {
-  const [reel] = await sql('SELECT * FROM reels WHERE id = $1 LIMIT 1', [id]);
-  if (!reel) throw new NotFoundError('Reel not found');
+  const cacheKey = `reel:${id}`;
 
-  reel.products = reel.product_ids?.length > 0
-    ? await sql('SELECT id, name, price, brand, images, category, color, affiliate_link FROM products WHERE id = ANY($1)', [reel.product_ids])
-    : [];
+  return getCached(cacheKey, CACHE_TTL.REELS, async () => {
+    const [reel] = await sql('SELECT * FROM reels WHERE id = $1 LIMIT 1', [id]);
+    if (!reel) throw new NotFoundError('Reel not found');
 
-  return reel;
+    reel.products = reel.product_ids?.length > 0
+      ? await sql('SELECT id, name, price, brand, images, category, color, affiliate_link FROM products WHERE id = ANY($1)', [reel.product_ids])
+      : [];
+
+    return reel;
+  });
 };
 
 export const createReel = async (reelData) => {
@@ -73,6 +86,9 @@ export const createReel = async (reelData) => {
   );
 
   if (!reel) throw new Error('Failed to create reel');
+
+  invalidateCacheByPrefix('reels:').catch(() => {});
+
   return reel;
 };
 
@@ -84,11 +100,11 @@ export const updateReel = async (id, updates) => {
   if (!existing) throw new NotFoundError('Reel not found');
 
   if (updates.video_url && existing.video_url !== updates.video_url) {
-    await deleteReelVideo(existing.video_url).catch(() => { });
+    await deleteReelVideo(existing.video_url).catch(() => {});
   }
 
   if (updates.thumbnail_url && existing.thumbnail_url !== updates.thumbnail_url) {
-    await deleteProductImage(existing.thumbnail_url).catch(() => { });
+    await deleteProductImage(existing.thumbnail_url).catch(() => {});
   }
 
   const data = validation.data;
@@ -103,6 +119,12 @@ export const updateReel = async (id, updates) => {
   );
 
   if (!updated) throw new Error('Failed to update reel');
+
+  Promise.all([
+    invalidateCacheByPrefix(`reel:${id}`),
+    invalidateCacheByPrefix('reels:')
+  ]).catch(() => {});
+
   return updated;
 };
 
@@ -110,10 +132,16 @@ export const deleteReel = async (id) => {
   const [reel] = await sql('SELECT video_url, thumbnail_url FROM reels WHERE id = $1 LIMIT 1', [id]);
   if (!reel) throw new NotFoundError('Reel not found');
 
-  if (reel.video_url) await deleteReelVideo(reel.video_url).catch(() => { });
-  if (reel.thumbnail_url) await deleteProductImage(reel.thumbnail_url).catch(() => { });
+  if (reel.video_url) await deleteReelVideo(reel.video_url).catch(() => {});
+  if (reel.thumbnail_url) await deleteProductImage(reel.thumbnail_url).catch(() => {});
 
   await sql('DELETE FROM reels WHERE id = $1', [id]);
+
+  Promise.all([
+    invalidateCacheByPrefix(`reel:${id}`),
+    invalidateCacheByPrefix('reels:')
+  ]).catch(() => {});
+
   return true;
 };
 

@@ -3,8 +3,16 @@ dotenv.config();
 
 import { Pool } from '@neondatabase/serverless';
 
-// Singleton pool instance
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL is required');
+}
+
+export const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+});
 
 export const sql = async (text, params) => {
     try {
@@ -15,8 +23,4 @@ export const sql = async (text, params) => {
     }
 };
 
-// Also export pool if needed for transactions later
-export { pool };
-
-// Provide a 'query' alias if used elsewhere
 export const query = (text, params) => sql(text, params);

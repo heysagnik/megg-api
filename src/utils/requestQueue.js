@@ -1,16 +1,10 @@
-import logger from './logger.js';
-
 class RequestQueue {
-    constructor() {
+    constructor(concurrency = 3) {
         this.queue = [];
-        this.isProcessing = false;
+        this.running = 0;
+        this.concurrency = concurrency;
     }
 
-    /**
-     * Add a task to the queue
-     * @param {Function} task - A function that returns a Promise
-     * @returns {Promise} - Resolves when the task completes
-     */
     add(task) {
         return new Promise((resolve, reject) => {
             this.queue.push({ task, resolve, reject });
@@ -19,24 +13,21 @@ class RequestQueue {
     }
 
     async process() {
-        if (this.isProcessing) return;
-        if (this.queue.length === 0) return;
+        if (this.running >= this.concurrency || this.queue.length === 0) return;
 
-        this.isProcessing = true;
+        this.running++;
         const { task, resolve, reject } = this.queue.shift();
 
         try {
             const result = await task();
             resolve(result);
         } catch (error) {
-            logger.error(`Queue task failed: ${error.message}`);
             reject(error);
         } finally {
-            this.isProcessing = false;
+            this.running--;
             this.process();
         }
     }
 }
 
-// Export a singleton instance
-export const requestQueue = new RequestQueue();
+export const requestQueue = new RequestQueue(3);
