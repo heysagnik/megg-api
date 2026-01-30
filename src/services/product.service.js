@@ -5,6 +5,8 @@ import { productDataSchemaRaw, listProductsParamsRaw } from '../validators/produ
 import { OCCASION_MAP } from '../config/searchMappings.js';
 import { getCached, invalidateCacheByPrefix, CACHE_TTL } from '../utils/cache.js';
 
+const SLIM_FIELDS = 'id, name, price, brand, images, category::text as category, subcategory::text as subcategory, color, affiliate_link';
+
 const FABRIC_PROPERTIES = {
   breathable: ['cotton', 'linen', 'mesh', 'bamboo', 'rayon'],
   warm: ['wool', 'fleece', 'cashmere', 'thermal', 'velvet'],
