@@ -23,6 +23,20 @@ export const browseCategorySchema = z.object({
   query: listProductsParams.omit({ category: true }).optional()
 });
 
+export const browseBrandSchema = z.object({
+  params: z.object({
+    brand: z.string().min(1)
+  }),
+  query: z.object({
+    category: z.string().optional(),
+    subcategory: z.string().optional(),
+    color: z.string().optional(),
+    sort: z.enum(['popularity', 'price_asc', 'price_desc', 'oldest', 'newest']).optional(),
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+  }).optional()
+});
+
 export const productIdSchema = z.object({
   params: z.object({
     id: z.string().uuid()

@@ -564,3 +564,122 @@ export const getRecommendedFromSubcategory = async (id) => {
     );
   });
 };
+
+export const getAllBrands = async () => {
+  const cacheKey = 'brands:all';
+
+  return getCached(cacheKey, CACHE_TTL.CATEGORIES, async () => {
+    const brands = await sql(`
+      SELECT 
+        brand as name,
+        COUNT(*)::int as product_count,
+        MIN(price)::numeric as min_price,
+        MAX(price)::numeric as max_price,
+        json_agg(DISTINCT category::text) as categories
+      FROM products
+      WHERE is_active = true AND brand IS NOT NULL AND brand != ''
+      GROUP BY brand
+      HAVING COUNT(*) > 0
+      ORDER BY product_count DESC, brand ASC
+    `);
+
+    return brands;
+  });
+};
+
+export const getProductsByBrand = async (params) => {
+  const { brand, category, subcategory, color, sort = 'popularity', page = 1, limit = 20 } = params;
+  const offset = (page - 1) * limit;
+
+  const cacheKey = `brand:${brand}:${category || 'all'}:${subcategory || 'all'}:${color || 'all'}:${sort}:${page}:${limit}`;
+
+  return getCached(cacheKey, CACHE_TTL.PRODUCT_LIST, async () => {
+    const conditions = ['is_active = true', 'brand ILIKE $1'];
+    const sqlParams = [`%${brand}%`];
+    let paramIdx = 2;
+
+    if (category) {
+      conditions.push(`category::text ILIKE $${paramIdx++}`);
+      sqlParams.push(`%${category}%`);
+    }
+    if (subcategory) {
+      conditions.push(`subcategory::text ILIKE $${paramIdx++}`);
+      sqlParams.push(`%${subcategory}%`);
+    }
+    if (color) {
+      conditions.push(`color ILIKE $${paramIdx++}`);
+      sqlParams.push(`%${color}%`);
+    }
+
+    const limitIdx = paramIdx++;
+    const offsetIdx = paramIdx++;
+    sqlParams.push(limit, offset);
+
+    const orderBy = sort === 'price_asc' ? 'price ASC'
+      : sort === 'price_desc' ? 'price DESC'
+        : sort === 'newest' ? 'created_at DESC'
+          : 'popularity DESC';
+
+    const products = await sql(
+      `SELECT ${SLIM_FIELDS}, COUNT(*) OVER() as full_count
+       FROM products
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY ${orderBy}
+       LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      sqlParams
+    );
+
+    const total = products.length > 0 ? parseInt(products[0].full_count || 0) : 0;
+
+    const [categories, subcategories, colors] = await Promise.all([
+      sql(`
+        SELECT category::text as name, COUNT(*)::int as count
+        FROM products
+        WHERE is_active = true AND brand ILIKE $1
+        GROUP BY category
+        ORDER BY count DESC
+      `, [`%${brand}%`]),
+
+      category ? sql(`
+        SELECT subcategory::text as name, COUNT(*)::int as count
+        FROM products
+        WHERE is_active = true AND brand ILIKE $1 AND category::text ILIKE $2
+        GROUP BY subcategory
+        HAVING subcategory IS NOT NULL AND subcategory::text != ''
+        ORDER BY count DESC
+        LIMIT 30
+      `, [`%${brand}%`, `%${category}%`]) : Promise.resolve([]),
+
+      sql(`
+        SELECT TRIM(color) as name, COUNT(*)::int as count
+        FROM products
+        WHERE is_active = true AND brand ILIKE $1
+        ${category ? 'AND category::text ILIKE $2' : ''}
+        GROUP BY TRIM(color)
+        HAVING TRIM(color) IS NOT NULL AND TRIM(color) != ''
+        ORDER BY count DESC
+        LIMIT 30
+      `, category ? [`%${brand}%`, `%${category}%`] : [`%${brand}%`])
+    ]);
+
+    return {
+      brand,
+      products,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      availableFilters: {
+        categories: categories || [],
+        subcategories: subcategories || [],
+        colors: colors || []
+      },
+      appliedFilters: {
+        category: category || null,
+        subcategory: subcategory || null,
+        color: color || null,
+        sort
+      }
+    };
+  });
+};

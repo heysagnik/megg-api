@@ -5,6 +5,7 @@ import { validate } from '../middleware/validate.js';
 import {
   listProductsSchema,
   browseCategorySchema,
+  browseBrandSchema,
   createProductSchema,
   createProductWithFilesSchema,
   updateProductSchema,
@@ -19,6 +20,8 @@ const router = express.Router();
 // Public routes (no auth required)
 router.get('/', generalLimiter, validate(listProductsSchema), productController.listProducts);
 router.get('/browse/:category', generalLimiter, validate(browseCategorySchema), productController.browseByCategory);
+router.get('/brands', generalLimiter, productController.getAllBrands);
+router.get('/brand/:brand', generalLimiter, validate(browseBrandSchema), productController.getProductsByBrand);
 router.get('/:id', generalLimiter, validate(productIdSchema), productController.getProduct);
 router.post('/:id/click', generalLimiter, validate(productIdSchema), productController.trackProductClick);
 router.get('/:id/related', generalLimiter, validate(productIdSchema), productController.getRelatedProducts);

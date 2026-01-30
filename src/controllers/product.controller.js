@@ -146,3 +146,26 @@ export const getRecommendedFromSubcategory = async (req, res, next) => {
     next(error);
   }
 };
+
+export const getAllBrands = async (req, res, next) => {
+  try {
+    const brands = await productService.getAllBrands();
+    res.set('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=7200');
+    res.json({ success: true, data: brands });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getProductsByBrand = async (req, res, next) => {
+  try {
+    const result = await productService.getProductsByBrand({
+      brand: req.params.brand,
+      ...req.query
+    });
+    res.set('Cache-Control', 'public, s-maxage=900, stale-while-revalidate=1800');
+    res.json({ success: true, data: result });
+  } catch (error) {
+    next(error);
+  }
+};

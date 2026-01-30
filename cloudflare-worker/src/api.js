@@ -182,6 +182,122 @@ app.get('/api/products/browse/:category', async (c) => {
   }
 });
 
+app.get('/api/products/brand/:brand', async (c) => {
+  try {
+    const brand = c.req.param('brand');
+    const { category, subcategory, color, sort = 'popularity' } = c.req.query();
+    const { page, limit, offset } = validatePagination(c.req.query('page'), c.req.query('limit'));
+
+    const cacheKey = `brand:${brand}:${category || 'all'}:${subcategory || 'all'}:${color || 'all'}:${page}:${limit}:${sort}`;
+
+    const cached = await c.env.CACHE.get(cacheKey, 'json');
+    if (cached) return c.json(cached);
+
+    const sql = getDB(c.env);
+
+    const conditions = ['is_active = true', 'brand ILIKE $1'];
+    const params = [`%${brand}%`];
+    let paramIdx = 2;
+
+    if (category) {
+      conditions.push(`category::text ILIKE $${paramIdx++}`);
+      params.push(`%${category}%`);
+    }
+    if (subcategory) {
+      conditions.push(`subcategory::text ILIKE $${paramIdx++}`);
+      params.push(`%${subcategory}%`);
+    }
+    if (color) {
+      conditions.push(`color ILIKE $${paramIdx++}`);
+      params.push(`%${color}%`);
+    }
+
+    const limitIdx = paramIdx++;
+    const offsetIdx = paramIdx++;
+    params.push(limit, offset);
+
+    const orderBy = sort === 'price_asc' ? 'price ASC'
+      : sort === 'price_desc' ? 'price DESC'
+        : sort === 'newest' ? 'created_at DESC'
+          : 'popularity DESC';
+
+    const [products, categories, subcategories, colors, totalCount] = await Promise.all([
+      sql(`
+        SELECT id, name, price, brand, images, category::text as category, subcategory::text as subcategory, color, affiliate_link, popularity
+        FROM products
+        WHERE ${conditions.join(' AND ')}
+        ORDER BY ${orderBy}
+        LIMIT $${limitIdx} OFFSET $${offsetIdx}
+      `, params),
+
+      sql(`
+        SELECT category::text as name, COUNT(*)::int as count
+        FROM products
+        WHERE is_active = true AND brand ILIKE $1
+        GROUP BY category
+        ORDER BY count DESC
+      `, [`%${brand}%`]),
+
+      category ? sql(`
+        SELECT subcategory::text as name, COUNT(*)::int as count
+        FROM products
+        WHERE is_active = true AND brand ILIKE $1 AND category::text ILIKE $2
+        GROUP BY subcategory
+        HAVING subcategory IS NOT NULL AND subcategory::text != ''
+        ORDER BY count DESC
+        LIMIT 30
+      `, [`%${brand}%`, `%${category}%`]) : Promise.resolve([]),
+
+      sql(`
+        SELECT TRIM(color) as name, COUNT(*)::int as count
+        FROM products
+        WHERE is_active = true AND brand ILIKE $1
+        ${category ? 'AND category::text ILIKE $2' : ''}
+        GROUP BY TRIM(color)
+        HAVING TRIM(color) IS NOT NULL AND TRIM(color) != ''
+        ORDER BY count DESC
+        LIMIT 30
+      `, category ? [`%${brand}%`, `%${category}%`] : [`%${brand}%`]),
+
+      sql(`
+        SELECT COUNT(*)::int as count
+        FROM products
+        WHERE ${conditions.join(' AND ')}
+      `, params.slice(0, paramIdx - 2))
+    ]);
+
+    const total = totalCount[0]?.count || 0;
+
+    const result = {
+      brand,
+      products: products || [],
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      availableFilters: {
+        categories: categories || [],
+        subcategories: subcategories || [],
+        colors: colors || []
+      },
+      appliedFilters: {
+        category: category || null,
+        subcategory: subcategory || null,
+        color: color || null,
+        sort
+      }
+    };
+
+    c.executionCtx.waitUntil(
+      c.env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: CACHE_TTL.PRODUCT_LIST })
+    );
+
+    return c.json(result);
+  } catch (error) {
+    return c.json({ error: 'Failed to fetch brand products' }, 500);
+  }
+});
+
 app.get('/api/products/:id', async (c) => {
   try {
     const id = c.req.param('id');
@@ -362,6 +478,37 @@ app.get('/api/categories', async (c) => {
     return c.json(categories);
   } catch (error) {
     return c.json({ error: 'Failed to fetch categories' }, 500);
+  }
+});
+
+app.get('/api/products/brands', async (c) => {
+  try {
+    const cacheKey = 'brands:all';
+    const cached = await c.env.CACHE.get(cacheKey, 'json');
+    if (cached) return c.json(cached);
+
+    const sql = getDB(c.env);
+    const brands = await sql`
+      SELECT 
+        brand as name,
+        COUNT(*)::int as product_count,
+        MIN(price)::numeric as min_price,
+        MAX(price)::numeric as max_price,
+        json_agg(DISTINCT category::text) as categories
+      FROM products
+      WHERE is_active = true AND brand IS NOT NULL AND brand != ''
+      GROUP BY brand
+      HAVING COUNT(*) > 0
+      ORDER BY product_count DESC, brand ASC
+    `;
+
+    c.executionCtx.waitUntil(
+      c.env.CACHE.put(cacheKey, JSON.stringify(brands), { expirationTtl: CACHE_TTL.CATEGORIES })
+    );
+
+    return c.json(brands);
+  } catch (error) {
+    return c.json({ error: 'Failed to fetch brands' }, 500);
   }
 });
 
