@@ -97,7 +97,7 @@ app.get('/api/products', async (c) => {
     }
 
     const result = { products, page, limit };
-    
+
     c.executionCtx.waitUntil(
       c.env.CACHE.put(cacheKey, JSON.stringify(result), { expirationTtl: CACHE_TTL.PRODUCT_LIST })
     );
@@ -214,6 +214,9 @@ app.get('/api/products/brand/:brand', async (c) => {
       conditions.push(`(${colorConditions.join(' OR ')})`);
     }
 
+    const whereClause = conditions.join(' AND ');
+    const countParams = [...params];
+
     const limitIdx = paramIdx++;
     const offsetIdx = paramIdx++;
     params.push(limit, offset);
@@ -222,9 +225,6 @@ app.get('/api/products/brand/:brand', async (c) => {
       : sort === 'price_desc' ? 'price DESC'
         : sort === 'newest' ? 'created_at DESC'
           : 'popularity DESC';
-
-    const whereClause = conditions.join(' AND ');
-    const countParams = params.slice(0, paramIdx - 2);
 
     const [products, categories, subcategories, colors, totalCount] = await Promise.all([
       sql(
@@ -312,7 +312,8 @@ app.get('/api/products/brand/:brand', async (c) => {
 
     return c.json(result);
   } catch (error) {
-    return c.json({ error: 'Failed to fetch brand products' }, 500);
+    console.error('Error fetching brand products:', error);
+    return c.json({ error: 'Failed to fetch brand products', details: error.message }, 500);
   }
 });
 
@@ -397,7 +398,7 @@ app.get('/api/products/:id', async (c) => {
           `
     ]);
 
-    sql`UPDATE products SET popularity = popularity + 1 WHERE id = ${id}`.catch(() => {});
+    sql`UPDATE products SET popularity = popularity + 1 WHERE id = ${id}`.catch(() => { });
 
     const result = { product, variants: variants || [], recommended: recommended || [] };
 
@@ -946,7 +947,7 @@ app.get('/api/search/filters', async (c) => {
   try {
     const url = new URL(c.req.url);
     const cacheKey = `search:filters:${url.search}`;
-    
+
     const cached = await c.env.CACHE.get(cacheKey, 'json');
     if (cached) return c.json(cached);
 
@@ -973,7 +974,7 @@ app.get('/api/search/suggestions', async (c) => {
   try {
     const url = new URL(c.req.url);
     const cacheKey = `search:suggestions:${url.search}`;
-    
+
     const cached = await c.env.CACHE.get(cacheKey, 'json');
     if (cached) return c.json(cached);
 
@@ -1000,7 +1001,7 @@ app.all('/api/search', async (c) => {
   try {
     const url = new URL(c.req.url);
     const cacheKey = `search:v2:${url.search}`;
-    
+
     const cached = await c.env.CACHE.get(cacheKey, 'json');
     if (cached) return c.json(cached);
 
